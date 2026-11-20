@@ -1,1 +1,2808 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Eco — Comunicação P2P Ultra-Dark</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-canvas: #040406;
+      --bg-rail: #07080B;
+      --bg-sidebar: #0B0D12;
+      --bg-elevated: #12151D;
+      --bg-surface-hover: #181C26;
+      --border-subtle: rgba(255, 255, 255, 0.055);
+      --border-focus: rgba(255, 255, 255, 0.14);
+      --accent: #6366F1;
+      --accent-soft: rgba(99, 102, 241, 0.14);
+      --text-primary: #F3F4F6;
+      --text-secondary: #9CA3AF;
+      --text-muted: #525866;
+      --font-size-base: 15px;
+      --avatar-radius: 9999px;
+      --bubble-radius: 16px;
+    }
 
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background-color: var(--bg-canvas);
+      color: var(--text-primary);
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      font-size: var(--font-size-base);
+      overflow: hidden;
+      user-select: none;
+    }
+    .font-mono-id { font-family: 'JetBrains Mono', monospace; }
+    .selectable-text { user-select: text; }
+
+    /* Custom Scrollbar Ultra-Dark */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 99px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.18); }
+
+    /* Wallpaper Patterns */
+    .wp-grid {
+      background-image: linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+                        linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+      background-size: 28px 28px;
+    }
+    .wp-dots {
+      background-image: radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px);
+      background-size: 18px 18px;
+    }
+
+    @keyframes pulseRing {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      70% { transform: scale(1.25); opacity: 0; }
+      100% { transform: scale(1.25); opacity: 0; }
+    }
+    .pulse-ring::before {
+      content: '';
+      position: absolute;
+      inset: -4px;
+      border-radius: 9999px;
+      border: 2px solid #EF4444;
+      animation: pulseRing 1.4s infinite;
+    }
+
+    @keyframes highlightFlash {
+      0% { background-color: var(--accent-soft); }
+      100% { background-color: transparent; }
+    }
+    .flash-msg { animation: highlightFlash 1.6s ease-out; }
+
+    .avatar-shape { border-radius: var(--avatar-radius); }
+    .msg-bubble { border-radius: var(--bubble-radius); }
+  </style>
+</head>
+<body>
+
+<div id="app" class="h-screen w-screen flex overflow-hidden relative" style="background: var(--bg-canvas);">
+
+  <!-- =========================================================
+       COLUNA 1: RAIL LATERAL (68px)
+  ========================================================== -->
+  <aside id="left-rail" class="w-[68px] shrink-0 flex flex-col items-center py-3 border-r z-20"
+         style="background: var(--bg-rail); border-color: var(--border-subtle);">
+    <!-- Logo Eco / DMs -->
+    <button onclick="switchMode('dm')" id="btn-mode-dm" title="Mensagens Diretas (Eco P2P)"
+            class="relative group w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-200 mb-2">
+      <span id="dm-pill" class="absolute left-0 w-1 h-6 rounded-r-full transition-all duration-200" style="background: var(--accent);"></span>
+      <div class="w-11 h-11 rounded-2xl flex items-center justify-center transition-all" style="background: var(--bg-elevated); border: 1px solid var(--border-subtle);">
+        <!-- Lua Minimalista Eco -->
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+          <path d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
+                stroke="var(--accent)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" fill="var(--accent-soft)"/>
+        </svg>
+      </div>
+      <span id="dm-unread-badge" class="hidden absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center bg-rose-600 text-white">0</span>
+    </button>
+
+    <div class="w-7 h-[1px] my-1.5" style="background: var(--border-subtle);"></div>
+
+    <!-- Lista de Espaços / Salas P2P -->
+    <div id="spaces-list" class="flex-1 w-full flex flex-col items-center gap-2.5 overflow-y-auto py-1"></div>
+
+    <!-- Botão Adicionar / Entrar em Espaço -->
+    <button onclick="openModal('space-modal')" title="Criar ou Entrar em Sala/Espaço P2P"
+            class="w-11 h-11 rounded-full hover:rounded-2xl flex items-center justify-center transition-all duration-200 mt-2 text-emerald-400 hover:text-white hover:bg-emerald-600/20"
+            style="background: var(--bg-elevated); border: 1px solid var(--border-subtle);">
+      <i data-lucide="plus" class="w-5 h-5"></i>
+    </button>
+
+    <!-- Status P2P Cloud Indicator -->
+    <div id="p2p-status-dot" title="Conectando à rede P2P..."
+         class="mt-3 w-3 h-3 rounded-full bg-amber-500 transition-colors cursor-pointer"
+         onclick="showToast('Status da Rede P2P: ' + (state.peerOpen ? 'Online e pronto para conexões diretas!' : 'Conectando...'))"></div>
+
+    <!-- Botão Configurações -->
+    <button onclick="openModal('settings-modal')" title="Configurações Completas"
+            class="mt-3 w-11 h-11 rounded-2xl flex items-center justify-center text-gray-400 hover:text-white transition-all duration-200 hover:rotate-45"
+            style="background: var(--bg-elevated); border: 1px solid var(--border-subtle);">
+      <i data-lucide="settings" class="w-5 h-5"></i>
+    </button>
+  </aside>
+
+  <!-- =========================================================
+       COLUNA 2: PAINEL DE NAVEGAÇÃO (290px)
+  ========================================================== -->
+  <aside id="nav-sidebar" class="w-[290px] shrink-0 flex flex-col border-r z-10 transition-all duration-200"
+         style="background: var(--bg-sidebar); border-color: var(--border-subtle);">
+
+    <!-- Header Modo DM -->
+    <div id="nav-dm-header" class="p-3.5 border-b flex flex-col gap-2.5" style="border-color: var(--border-subtle);">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="font-semibold tracking-tight text-base">Eco</span>
+          <span class="text-[10px] px-1.5 py-0.5 rounded font-mono-id uppercase tracking-wider"
+                style="background: var(--accent-soft); color: var(--accent);">P2P Live</span>
+        </div>
+        <div class="flex items-center gap-1">
+          <button onclick="openModal('quick-switcher-modal')" title="Busca Rápida (Ctrl+K)"
+                  class="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/5">
+            <i data-lucide="search" class="w-4 h-4"></i>
+          </button>
+          <button onclick="openModal('add-contact-modal')" title="Conectar a Usuário Real por ID"
+                  class="px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 text-white transition"
+                  style="background: var(--accent);">
+            <i data-lucide="user-plus" class="w-3.5 h-3.5"></i>
+            <span>Conectar ID</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Busca DMs -->
+      <div class="relative">
+        <i data-lucide="search" class="w-3.5 h-3.5 text-gray-500 absolute left-3 top-1/2 -translate-y-1/2"></i>
+        <input id="dm-search-input" type="text" placeholder="Buscar conversa ou ECO#ID..."
+               oninput="renderNavList()"
+               class="w-full pl-8 pr-3 py-1.5 rounded-xl text-xs outline-none transition"
+               style="background: var(--bg-elevated); border: 1px solid var(--border-subtle); color: var(--text-primary);" />
+      </div>
+
+      <!-- Filtros estilo WhatsApp -->
+      <div class="flex gap-1 text-[11px]">
+        <button onclick="setDmFilter('all')" id="filter-all" class="px-2.5 py-1 rounded-lg font-medium transition">Todas</button>
+        <button onclick="setDmFilter('unread')" id="filter-unread" class="px-2.5 py-1 rounded-lg font-medium transition">Não lidas</button>
+        <button onclick="setDmFilter('online')" id="filter-online" class="px-2.5 py-1 rounded-lg font-medium transition">Conectados</button>
+      </div>
+    </div>
+
+    <!-- Header Modo Espaço/Grupo -->
+    <div id="nav-space-header" class="hidden p-3.5 border-b flex-col gap-2" style="border-color: var(--border-subtle);">
+      <div class="flex items-center justify-between">
+        <h2 id="active-space-title" class="font-semibold text-sm truncate">Espaço</h2>
+        <div class="flex items-center gap-1">
+          <button onclick="copyActiveSpaceCode()" title="Copiar Código de Convite P2P"
+                  class="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/5">
+            <i data-lucide="share-2" class="w-4 h-4"></i>
+          </button>
+          <button onclick="openCreateChannelModal()" title="Novo Canal de Texto"
+                  class="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/5">
+            <i data-lucide="folder-plus" class="w-4 h-4"></i>
+          </button>
+          <button onclick="leaveActiveSpace()" title="Sair deste Espaço"
+                  class="p-1.5 rounded-lg text-rose-400 hover:bg-rose-500/10">
+            <i data-lucide="log-out" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+      <div class="flex items-center justify-between text-[11px] text-gray-400 px-2 py-1 rounded-lg" style="background: var(--bg-elevated);">
+        <span>Código Sala P2P:</span>
+        <button onclick="copyActiveSpaceCode()" id="active-space-code-label" class="font-mono-id text-xs hover:underline" style="color: var(--accent);">---</button>
+      </div>
+    </div>
+
+    <!-- Lista Dinâmica (Contatos/Conversas ou Canais) -->
+    <div id="nav-list-container" class="flex-1 overflow-y-auto p-2 space-y-1"></div>
+
+    <!-- Barra Fixa do Usuário Logado -->
+    <div class="p-2.5 border-t flex items-center justify-between gap-2"
+         style="background: var(--bg-rail); border-color: var(--border-subtle);">
+      <div class="flex items-center gap-2.5 min-w-0 cursor-pointer flex-1 p-1 rounded-xl hover:bg-white/5 transition"
+           onclick="openSettingsTab('profile')">
+        <div class="relative shrink-0">
+          <img id="self-avatar-img" src="" alt="Avatar" class="w-9 h-9 object-cover avatar-shape bg-zinc-900" />
+          <span id="self-status-dot" class="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-[#07080B] absolute bottom-0 right-0"></span>
+        </div>
+        <div class="min-w-0 flex-1">
+          <div id="self-display-name" class="text-xs font-semibold truncate">Você</div>
+          <div class="flex items-center gap-1">
+            <span id="self-eco-id" class="font-mono-id text-[10px] text-gray-400 truncate">ECO#----</span>
+          </div>
+        </div>
+      </div>
+      <div class="flex items-center gap-1 shrink-0">
+        <button onclick="copyOwnId()" title="Copiar seu ID para enviar a um amigo"
+                class="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition">
+          <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+        </button>
+        <button onclick="cycleOwnStatus()" title="Alternar Status"
+                class="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition">
+          <i data-lucide="circle-dot" class="w-3.5 h-3.5"></i>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- =========================================================
+       COLUNA 3: ÁREA PRINCIPAL DE CHAT & CALLS WEBRTC
+  ========================================================== -->
+  <main id="chat-main" class="flex-1 flex flex-col min-w-0 relative" style="background: var(--bg-canvas);">
+    <!-- Camada de Wallpaper -->
+    <div id="chat-wallpaper-layer" class="absolute inset-0 pointer-events-none z-0"></div>
+
+    <!-- Barra de Chamada WebRTC Ativa (Oculta até iniciar/receber call) -->
+    <div id="webrtc-call-banner" class="hidden z-20 border-b p-3 flex flex-col gap-3"
+         style="background: #090B10; border-color: var(--border-focus);">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span id="call-status-text" class="text-xs font-semibold">Chamada P2P Conectada</span>
+          <span id="call-timer" class="font-mono-id text-xs text-gray-400">00:00</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="toggleCallMute()" id="btn-call-mute" title="Mutar/Desmutar Microfone"
+                  class="p-2 rounded-xl bg-white/10 hover:bg-white/15 text-white transition">
+            <i data-lucide="mic" class="w-4 h-4"></i>
+          </button>
+          <button onclick="toggleCallCamera()" id="btn-call-cam" title="Ligar/Desligar Câmera"
+                  class="p-2 rounded-xl bg-white/10 hover:bg-white/15 text-white transition">
+            <i data-lucide="video" class="w-4 h-4"></i>
+          </button>
+          <button onclick="toggleScreenShare()" id="btn-call-screen" title="Compartilhar Tela (WebRTC)"
+                  class="p-2 rounded-xl bg-white/10 hover:bg-white/15 text-white transition">
+            <i data-lucide="monitor-up" class="w-4 h-4"></i>
+          </button>
+          <button onclick="endActiveCall()" title="Encerrar Chamada"
+                  class="px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold flex items-center gap-1.5 transition">
+            <i data-lucide="phone-off" class="w-4 h-4"></i>
+            <span>Encerrar</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Grade de Vídeos / Compartilhamento de Tela -->
+      <div id="call-videos-grid" class="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-[280px]">
+        <div class="relative rounded-xl overflow-hidden bg-black/80 border border-white/10 h-[200px] flex items-center justify-center">
+          <video id="remote-video" autoplay playsinline class="w-full h-full object-contain"></video>
+          <span id="remote-video-label" class="absolute bottom-2 left-2 text-[11px] px-2 py-0.5 rounded bg-black/70 text-gray-200">Remoto</span>
+        </div>
+        <div class="relative rounded-xl overflow-hidden bg-black/80 border border-white/10 h-[200px] flex items-center justify-center">
+          <video id="local-video" autoplay muted playsinline class="w-full h-full object-contain"></video>
+          <span class="absolute bottom-2 left-2 text-[11px] px-2 py-0.5 rounded bg-black/70 text-gray-200">Você (Local / Tela)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Header do Chat -->
+    <header id="chat-header" class="h-14 px-4 border-b flex items-center justify-between shrink-0 z-10 backdrop-blur-md"
+            style="background: rgba(11, 13, 18, 0.85); border-color: var(--border-subtle);">
+      <div class="flex items-center gap-3 min-w-0">
+        <button onclick="toggleMobileSidebar()" class="md:hidden p-1.5 rounded-lg hover:bg-white/10">
+          <i data-lucide="menu" class="w-5 h-5"></i>
+        </button>
+        <div id="chat-header-avatar" class="shrink-0"></div>
+        <div class="min-w-0">
+          <div class="flex items-center gap-2">
+            <h1 id="chat-header-title" class="font-semibold text-sm truncate">Bem-vindo ao Eco</h1>
+            <span id="chat-header-badge" class="hidden text-[10px] font-mono-id px-1.5 py-0.5 rounded bg-white/5 text-gray-400"></span>
+          </div>
+          <p id="chat-header-subtitle" class="text-[11px] text-gray-400 truncate">Conecte-se usando seu ID real via WebRTC</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-1.5">
+        <!-- Botões de Chamada WebRTC Real -->
+        <button onclick="startWebRTCCall(false)" id="btn-voice-call" title="Chamada de Voz P2P (WebRTC)"
+                class="hidden p-2 rounded-xl text-gray-300 hover:text-white hover:bg-white/10 transition">
+          <i data-lucide="phone" class="w-4 h-4"></i>
+        </button>
+        <button onclick="startWebRTCCall(true)" id="btn-video-call" title="Chamada de Vídeo / Tela P2P (WebRTC)"
+                class="hidden p-2 rounded-xl text-gray-300 hover:text-white hover:bg-white/10 transition">
+          <i data-lucide="video" class="w-4 h-4"></i>
+        </button>
+        <button onclick="startScreenShareCall()" id="btn-screen-call" title="Compartilhar Tela Direto (WebRTC)"
+                class="hidden p-2 rounded-xl text-gray-300 hover:text-white hover:bg-white/10 transition">
+          <i data-lucide="monitor-up" class="w-4 h-4"></i>
+        </button>
+
+        <div class="w-[1px] h-5 mx-1 bg-white/10"></div>
+
+        <!-- Busca na Conversa -->
+        <div class="relative hidden sm:block">
+          <input id="chat-in-search" type="text" placeholder="Buscar no chat..." oninput="renderMessages()"
+                 class="w-36 focus:w-48 transition-all px-2.5 py-1 rounded-lg text-xs outline-none"
+                 style="background: var(--bg-elevated); border: 1px solid var(--border-subtle);" />
+        </div>
+
+        <!-- Mensagens Fixadas -->
+        <button onclick="togglePinnedPopover()" title="Mensagens Fixadas"
+                class="relative p-2 rounded-xl text-gray-400 hover:text-white hover:bg-white/10 transition">
+          <i data-lucide="pin" class="w-4 h-4"></i>
+          <span id="pinned-count-badge" class="hidden absolute top-1 right-1 w-2 h-2 rounded-full" style="background: var(--accent);"></span>
+        </button>
+
+        <!-- Toggle Painel Direito -->
+        <button onclick="toggleRightInspector()" title="Detalhes e Mídias"
+                class="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-white/10 transition">
+          <i data-lucide="panel-right" class="w-4 h-4"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- Popover Mensagens Fixadas -->
+    <div id="pinned-popover" class="hidden absolute top-16 right-16 w-80 max-h-80 overflow-y-auto rounded-2xl p-3 z-30 shadow-2xl border"
+         style="background: var(--bg-elevated); border-color: var(--border-focus);">
+      <div class="flex items-center justify-between pb-2 mb-2 border-b" style="border-color: var(--border-subtle);">
+        <span class="text-xs font-semibold flex items-center gap-1.5"><i data-lucide="pin" class="w-3.5 h-3.5"></i> Mensagens Fixadas</span>
+        <button onclick="togglePinnedPopover()" class="text-gray-400 hover:text-white"><i data-lucide="x" class="w-4 h-4"></i></button>
+      </div>
+      <div id="pinned-list" class="space-y-2 text-xs"></div>
+    </div>
+
+    <!-- Feed de Mensagens -->
+    <div id="messages-feed" class="flex-1 overflow-y-auto px-4 py-4 space-y-1 z-10 selectable-text"
+         ondragover="handleDragOver(event)" ondrop="handleDropImage(event)">
+      <!-- Tela Inicial de Boas-Vindas P2P quando nenhuma conversa está selecionada -->
+      <div id="empty-welcome-screen" class="h-full flex flex-col items-center justify-center text-center max-w-md mx-auto px-4">
+        <div class="w-16 h-16 rounded-3xl flex items-center justify-center mb-4 border"
+             style="background: var(--bg-elevated); border-color: var(--border-focus);">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+            <path d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
+                  stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="var(--accent-soft)"/>
+          </svg>
+        </div>
+        <h2 class="text-lg font-semibold mb-1">Eco — Rede Direta P2P</h2>
+        <p class="text-xs text-gray-400 leading-relaxed mb-5">
+          Sem servidores centrais, sem bots e sem cargos. Compartilhe seu ID único com outra pessoa ou abra uma segunda aba para testar conexões, mensagens, áudios, fotos, chamadas e compartilhamento de tela em tempo real.
+        </p>
+        <div class="w-full p-3.5 rounded-2xl border flex items-center justify-between mb-4"
+             style="background: var(--bg-elevated); border-color: var(--border-subtle);">
+          <div class="text-left">
+            <div class="text-[10px] uppercase tracking-wider text-gray-500">Seu ID Único Online</div>
+            <div id="welcome-own-id" class="font-mono-id text-sm font-semibold" style="color: var(--accent);">Gerando...</div>
+          </div>
+          <button onclick="copyOwnId()" class="px-3 py-1.5 rounded-xl text-xs font-medium text-white transition"
+                  style="background: var(--accent);">
+            Copiar ID
+          </button>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="openModal('add-contact-modal')" class="px-4 py-2 rounded-xl text-xs font-medium bg-white/10 hover:bg-white/15 transition">
+            Conectar a um ID
+          </button>
+          <button onclick="openModal('space-modal')" class="px-4 py-2 rounded-xl text-xs font-medium bg-white/5 hover:bg-white/10 transition">
+            Criar Sala / Espaço
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Barra de Resposta / Edição / Preview de Imagem -->
+    <div id="composer-context-bar" class="hidden px-4 py-2 border-t flex items-center justify-between text-xs z-10"
+         style="background: var(--bg-elevated); border-color: var(--border-subtle);">
+      <div id="composer-context-info" class="flex items-center gap-2 truncate"></div>
+      <button onclick="clearComposerContext()" class="p-1 text-gray-400 hover:text-white"><i data-lucide="x" class="w-4 h-4"></i></button>
+    </div>
+
+    <!-- Preview de Imagem Anexada antes de Enviar -->
+    <div id="image-preview-bar" class="hidden px-4 py-2.5 border-t flex items-center gap-3 z-10"
+         style="background: var(--bg-elevated); border-color: var(--border-subtle);">
+      <img id="pending-image-thumb" src="" class="h-16 w-16 object-cover rounded-xl border border-white/10" />
+      <div class="flex-1 text-xs text-gray-300">
+        <div class="font-medium">Imagem pronta para envio</div>
+        <div class="text-gray-500 text-[11px]">Digite uma legenda abaixo ou pressione Enter</div>
+      </div>
+      <button onclick="clearPendingImage()" class="p-1.5 rounded-lg text-rose-400 hover:bg-rose-500/10">
+        <i data-lucide="trash-2" class="w-4 h-4"></i>
+      </button>
+    </div>
+
+    <!-- Drawer de GIFs e Emojis -->
+    <div id="picker-drawer" class="hidden mx-4 mb-2 rounded-2xl border p-3 z-20 shadow-2xl"
+         style="background: var(--bg-elevated); border-color: var(--border-focus);">
+      <div class="flex items-center justify-between mb-2">
+        <div class="flex gap-1.5 text-xs">
+          <button onclick="switchPickerTab('emoji')" id="tab-picker-emoji" class="px-3 py-1 rounded-lg font-medium">Emojis</button>
+          <button onclick="switchPickerTab('gif')" id="tab-picker-gif" class="px-3 py-1 rounded-lg font-medium">GIFs</button>
+        </div>
+        <button onclick="closePickerDrawer()" class="text-gray-400 hover:text-white"><i data-lucide="x" class="w-4 h-4"></i></button>
+      </div>
+      <div id="picker-emoji-content" class="grid grid-cols-10 gap-1 max-h-44 overflow-y-auto text-lg"></div>
+      <div id="picker-gif-content" class="hidden space-y-2">
+        <input id="gif-search-input" type="text" placeholder="Filtrar GIFs (ex: feliz, rave, código, gato, noite)..."
+               oninput="renderGifGrid()"
+               class="w-full px-3 py-1.5 rounded-xl text-xs outline-none"
+               style="background: var(--bg-sidebar); border: 1px solid var(--border-subtle);" />
+        <div id="gif-grid" class="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-48 overflow-y-auto"></div>
+      </div>
+    </div>
+
+    <!-- Compositor de Mensagem -->
+    <footer id="composer-footer" class="hidden px-4 py-3 border-t z-10"
+            style="background: var(--bg-sidebar); border-color: var(--border-subtle);">
+      <!-- Modo Normal -->
+      <div id="composer-normal-mode" class="flex items-end gap-2">
+        <input type="file" id="chat-file-input" accept="image/*" class="hidden" onchange="handleChatFileSelect(event)" />
+        <button onclick="document.getElementById('chat-file-input').click()" title="Enviar Foto do PC (ou Ctrl+V)"
+                class="p-2.5 rounded-xl text-gray-400 hover:text-white hover:bg-white/10 transition shrink-0">
+          <i data-lucide="image-plus" class="w-5 h-5"></i>
+        </button>
+
+        <div class="flex-1 flex items-end rounded-2xl px-3 py-1.5 border transition"
+             style="background: var(--bg-elevated); border-color: var(--border-subtle);">
+          <textarea id="msg-textarea" rows="1" placeholder="Mensagem... (Enter envia, Shift+Enter quebra linha, Ctrl+V cola print)"
+                    onkeydown="handleComposerKeydown(event)"
+                    oninput="handleComposerInput(this)"
+                    onpaste="handleComposerPaste(event)"
+                    class="w-full bg-transparent text-sm outline-none resize-none max-h-32 py-1 leading-relaxed"></textarea>
+          <div class="flex items-center gap-1 ml-2 shrink-0 pb-0.5">
+            <button onclick="togglePickerDrawer('gif')" title="Enviar GIF"
+                    class="px-1.5 py-0.5 rounded text-[10px] font-bold border border-white/15 text-gray-300 hover:text-white hover:bg-white/10">
+              GIF
+            </button>
+            <button onclick="togglePickerDrawer('emoji')" title="Emojis"
+                    class="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/10">
+              <i data-lucide="smile" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Botão Gravar Voz / Enviar -->
+        <button id="btn-mic-record" onclick="startVoiceRecording()" title="Gravar Mensagem de Voz"
+                class="p-2.5 rounded-xl text-gray-300 hover:text-white hover:bg-white/10 transition shrink-0"
+                style="background: var(--bg-elevated); border: 1px solid var(--border-subtle);">
+          <i data-lucide="mic" class="w-5 h-5"></i>
+        </button>
+        <button id="btn-send-msg" onclick="sendCurrentMessage()" title="Enviar Mensagem"
+                class="hidden p-2.5 rounded-xl text-white transition shrink-0"
+                style="background: var(--accent);">
+          <i data-lucide="send" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Modo Gravando Áudio -->
+      <div id="composer-recording-mode" class="hidden items-center justify-between gap-3 px-3 py-2 rounded-2xl border border-rose-500/30 bg-rose-950/20">
+        <div class="flex items-center gap-3">
+          <span class="relative w-3 h-3 rounded-full bg-rose-500 pulse-ring"></span>
+          <span class="text-xs font-medium text-rose-300">Gravando áudio...</span>
+          <span id="recording-timer" class="font-mono-id text-xs text-white">00:00</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="cancelVoiceRecording()" class="px-3 py-1.5 rounded-xl text-xs text-gray-300 hover:bg-white/10">
+            Cancelar
+          </button>
+          <button onclick="finishAndSendVoiceRecording()" class="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 flex items-center gap-1.5">
+            <i data-lucide="send" class="w-3.5 h-3.5"></i>
+            <span>Enviar Áudio</span>
+          </button>
+        </div>
+      </div>
+    </footer>
+  </main>
+
+  <!-- =========================================================
+       COLUNA 4: PAINEL DIREITO CONTEXTUAL (270px)
+  ========================================================== -->
+  <aside id="right-inspector" class="hidden lg:flex w-[270px] shrink-0 flex-col border-l overflow-y-auto z-10"
+         style="background: var(--bg-sidebar); border-color: var(--border-subtle);">
+    <div id="inspector-content" class="p-4 space-y-4">
+      <div class="text-xs text-gray-500 text-center py-10">
+        Selecione uma conversa ou sala para ver detalhes e mídias compartilhadas.
+      </div>
+    </div>
+  </aside>
+
+</div>
+
+<!-- =========================================================
+     MODAL 1: CONECTAR USUÁRIO REAL POR ID (PEERJS)
+========================================================== -->
+<div id="add-contact-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+  <div class="w-full max-w-md rounded-3xl border p-5 shadow-2xl space-y-4"
+       style="background: var(--bg-elevated); border-color: var(--border-focus);">
+    <div class="flex items-center justify-between">
+      <h3 class="font-semibold text-base flex items-center gap-2">
+        <i data-lucide="user-plus" class="w-4 h-4" style="color: var(--accent);"></i>
+        <span>Conectar Usuário Real (P2P)</span>
+      </h3>
+      <button onclick="closeModal('add-contact-modal')" class="p-1 text-gray-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+
+    <p class="text-xs text-gray-400 leading-relaxed">
+      O Eco não usa bots nem contas falsas. Cole abaixo o <strong>ID único</strong> de outro usuário que esteja com o Eco aberto (ou abra outra aba do navegador para testar agora).
+    </p>
+
+    <div class="p-3 rounded-2xl border flex items-center justify-between" style="background: var(--bg-sidebar); border-color: var(--border-subtle);">
+      <div>
+        <div class="text-[10px] text-gray-500 uppercase">Seu ID para compartilhar</div>
+        <div id="modal-own-id" class="font-mono-id text-xs font-semibold" style="color: var(--accent);">---</div>
+      </div>
+      <button onclick="copyOwnId()" class="px-2.5 py-1 rounded-lg text-xs bg-white/10 hover:bg-white/15">Copiar</button>
+    </div>
+
+    <div class="space-y-2">
+      <label class="text-xs font-medium text-gray-300">ID do Destinatário</label>
+      <input id="target-peer-id-input" type="text" placeholder="Ex: ECO-9482 ou ID completo..."
+             class="w-full px-3.5 py-2.5 rounded-xl text-sm font-mono-id outline-none"
+             style="background: var(--bg-canvas); border: 1px solid var(--border-focus);" />
+    </div>
+
+    <div class="space-y-2">
+      <label class="text-xs font-medium text-gray-300">Apelido Local (Opcional)</label>
+      <input id="target-peer-alias-input" type="text" placeholder="Como você quer chamar este contato"
+             class="w-full px-3.5 py-2 rounded-xl text-xs outline-none"
+             style="background: var(--bg-canvas); border: 1px solid var(--border-subtle);" />
+    </div>
+
+    <div class="flex justify-end gap-2 pt-2">
+      <button onclick="closeModal('add-contact-modal')" class="px-4 py-2 rounded-xl text-xs text-gray-400 hover:text-white">Cancelar</button>
+      <button onclick="connectToRemotePeer()" class="px-4 py-2 rounded-xl text-xs font-semibold text-white transition"
+              style="background: var(--accent);">
+        Conectar Agora
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- =========================================================
+     MODAL 2: CRIAR OU ENTRAR EM ESPAÇO / SALA P2P
+========================================================== -->
+<div id="space-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+  <div class="w-full max-w-md rounded-3xl border p-5 shadow-2xl space-y-4"
+       style="background: var(--bg-elevated); border-color: var(--border-focus);">
+    <div class="flex items-center justify-between">
+      <h3 class="font-semibold text-base">Espaços & Salas P2P</h3>
+      <button onclick="closeModal('space-modal')" class="p-1 text-gray-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+
+    <div class="grid grid-cols-2 gap-1 p-1 rounded-xl" style="background: var(--bg-sidebar);">
+      <button onclick="switchSpaceModalTab('create')" id="tab-space-create" class="py-1.5 rounded-lg text-xs font-medium">Criar Novo Espaço</button>
+      <button onclick="switchSpaceModalTab('join')" id="tab-space-join" class="py-1.5 rounded-lg text-xs font-medium">Entrar por Código</button>
+    </div>
+
+    <div id="space-create-pane" class="space-y-3">
+      <div>
+        <label class="text-xs text-gray-300 block mb-1">Nome do Espaço / Grupo</label>
+        <input id="new-space-name" type="text" placeholder="Ex: Madrugada, Clã, Projeto X..."
+               class="w-full px-3.5 py-2 rounded-xl text-sm outline-none"
+               style="background: var(--bg-canvas); border: 1px solid var(--border-subtle);" />
+      </div>
+      <div>
+        <label class="text-xs text-gray-300 block mb-1">Ícone / Emoji do Espaço</label>
+        <input id="new-space-icon" type="text" maxlength="2" placeholder="🌙" value="🌙"
+               class="w-20 px-3.5 py-2 rounded-xl text-center text-base outline-none"
+               style="background: var(--bg-canvas); border: 1px solid var(--border-subtle);" />
+      </div>
+      <button onclick="createNewSpace()" class="w-full py-2.5 rounded-xl text-xs font-semibold text-white" style="background: var(--accent);">
+        Criar Espaço P2P
+      </button>
+    </div>
+
+    <div id="space-join-pane" class="hidden space-y-3">
+      <p class="text-xs text-gray-400">Cole o código de convite do host da sala para sincronizar canais e mensagens diretamente via WebRTC.</p>
+      <div>
+        <label class="text-xs text-gray-300 block mb-1">Código da Sala / Host ID</label>
+        <input id="join-space-code" type="text" placeholder="Ex: ECO-XXXX"
+               class="w-full px-3.5 py-2 rounded-xl text-sm font-mono-id outline-none"
+               style="background: var(--bg-canvas); border: 1px solid var(--border-subtle);" />
+      </div>
+      <button onclick="joinSpaceByCode()" class="w-full py-2.5 rounded-xl text-xs font-semibold text-white" style="background: var(--accent);">
+        Entrar na Sala
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- =========================================================
+     MODAL 3: CENTRAL COMPLETA DE CONFIGURAÇÕES (SEM CARGOS/TAGS)
+========================================================== -->
+<div id="settings-modal" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-0 md:p-6">
+  <div class="w-full h-full max-w-5xl md:rounded-3xl border flex flex-col md:flex-row overflow-hidden shadow-2xl"
+       style="background: var(--bg-sidebar); border-color: var(--border-focus);">
+
+    <!-- Sidebar de Configurações -->
+    <div class="w-full md:w-64 shrink-0 border-b md:border-b-0 md:border-r p-4 flex flex-col gap-3"
+         style="background: var(--bg-rail); border-color: var(--border-subtle);">
+      <div class="flex items-center justify-between">
+        <span class="font-semibold text-sm tracking-tight">Configurações do Eco</span>
+        <button onclick="closeModal('settings-modal')" class="md:hidden p-1 text-gray-400"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+      <input id="settings-search" type="text" placeholder="Filtrar opções..." oninput="filterSettingsTabs(this.value)"
+             class="w-full px-3 py-1.5 rounded-xl text-xs outline-none"
+             style="background: var(--bg-elevated); border: 1px solid var(--border-subtle);" />
+
+      <nav id="settings-nav" class="flex md:flex-col gap-1 overflow-x-auto text-xs">
+        <button onclick="openSettingsTab('profile')" data-tab="profile" class="settings-tab-btn flex items-center gap-2.5 px-3 py-2 rounded-xl text-left whitespace-nowrap">
+          <i data-lucide="user" class="w-4 h-4"></i><span>Perfil & Conta</span>
+        </button>
+        <button onclick="openSettingsTab('appearance')" data-tab="appearance" class="settings-tab-btn flex items-center gap-2.5 px-3 py-2 rounded-xl text-left whitespace-nowrap">
+          <i data-lucide="palette" class="w-4 h-4"></i><span>Temas & Aparência</span>
+        </button>
+        <button onclick="openSettingsTab('privacy')" data-tab="privacy" class="settings-tab-btn flex items-center gap-2.5 px-3 py-2 rounded-xl text-left whitespace-nowrap">
+          <i data-lucide="shield" class="w-4 h-4"></i><span>Privacidade & Bloqueios</span>
+        </button>
+        <button onclick="openSettingsTab('audio')" data-tab="audio" class="settings-tab-btn flex items-center gap-2.5 px-3 py-2 rounded-xl text-left whitespace-nowrap">
+          <i data-lucide="mic" class="w-4 h-4"></i><span>Áudio, Vídeo & WebRTC</span>
+        </button>
+        <button onclick="openSettingsTab('notifications')" data-tab="notifications" class="settings-tab-btn flex items-center gap-2.5 px-3 py-2 rounded-xl text-left whitespace-nowrap">
+          <i data-lucide="bell" class="w-4 h-4"></i><span>Sons & Notificações</span>
+        </button>
+        <button onclick="openSettingsTab('storage')" data-tab="storage" class="settings-tab-btn flex items-center gap-2.5 px-3 py-2 rounded-xl text-left whitespace-nowrap">
+          <i data-lucide="hard-drive" class="w-4 h-4"></i><span>Armazenamento & Backup</span>
+        </button>
+      </nav>
+    </div>
+
+    <!-- Conteúdo da Aba Selecionada -->
+    <div class="flex-1 flex flex-col min-w-0" style="background: var(--bg-canvas);">
+      <div class="h-14 px-6 border-b flex items-center justify-between shrink-0" style="border-color: var(--border-subtle);">
+        <h2 id="settings-panel-title" class="font-semibold text-sm">Perfil & Conta</h2>
+        <button onclick="closeModal('settings-modal')" class="px-3 py-1.5 rounded-xl text-xs bg-white/5 hover:bg-white/10 flex items-center gap-1.5">
+          <span>Fechar</span>
+          <span class="text-[10px] text-gray-500 font-mono-id">ESC</span>
+        </button>
+      </div>
+
+      <div id="settings-panel-body" class="flex-1 overflow-y-auto p-6 space-y-6 text-xs">
+        <!-- Preenchido dinamicamente via renderSettingsContent() -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- =========================================================
+     MODAL 4: LIGHTBOX DE IMAGEM FULLSCREEN
+========================================================== -->
+<div id="lightbox-modal" class="hidden fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-4" onclick="closeModal('lightbox-modal')">
+  <div class="absolute top-4 right-4 flex items-center gap-2" onclick="event.stopPropagation()">
+    <a id="lightbox-download" download="eco-imagem.png" href="#" class="px-3 py-1.5 rounded-xl text-xs bg-white/10 hover:bg-white/20 text-white flex items-center gap-1.5">
+      <i data-lucide="download" class="w-4 h-4"></i><span>Baixar</span>
+    </a>
+    <button onclick="closeModal('lightbox-modal')" class="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white">
+      <i data-lucide="x" class="w-5 h-5"></i>
+    </button>
+  </div>
+  <img id="lightbox-img" src="" class="max-w-full max-h-[85vh] rounded-2xl object-contain shadow-2xl" onclick="event.stopPropagation()" />
+</div>
+
+<!-- =========================================================
+     MODAL 5: QUICK SWITCHER (CTRL+K)
+========================================================== -->
+<div id="quick-switcher-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-start justify-center pt-20 p-4" onclick="closeModal('quick-switcher-modal')">
+  <div class="w-full max-w-lg rounded-2xl border overflow-hidden shadow-2xl"
+       style="background: var(--bg-elevated); border-color: var(--border-focus);" onclick="event.stopPropagation()">
+    <div class="p-3 border-b flex items-center gap-2.5" style="border-color: var(--border-subtle);">
+      <i data-lucide="search" class="w-4 h-4 text-gray-400"></i>
+      <input id="quick-switcher-input" type="text" placeholder="Ir para conversa, sala, canal ou configuração..."
+             oninput="renderQuickSwitcher(this.value)"
+             class="w-full bg-transparent text-sm outline-none" />
+    </div>
+    <div id="quick-switcher-results" class="max-h-72 overflow-y-auto p-2 space-y-1 text-xs"></div>
+  </div>
+</div>
+
+<!-- Toast Notification Container -->
+<div id="toast-container" class="fixed bottom-4 right-4 z-[60] flex flex-col gap-2 pointer-events-none"></div>
+
+<!-- =========================================================
+     LÓGICA COMPLETA: WEBRTC, PEERJS, MEDIA RECORDER, TEMAS & UI
+========================================================== -->
+<script>
+const STORAGE_KEY = 'eco_p2p_state_v1';
+
+// Biblioteca curada de GIFs (URLs diretas leves e funcionais)
+const CURATED_GIFS = [
+  { tag: 'noite lua vibe', url: 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbW54Z3p6Z3p6Z3p6Z3p6Z3p6Z3p6Z3p6Z3p6Z3p6Z3p6/3o7aCTPPm4OHfRLSH6/giphy.gif' },
+  { tag: 'feliz festa comemoração', url: 'https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif' },
+  { tag: 'código digitando hacker', url: 'https://media.giphy.com/media/13HgwGsXF0aiGY/giphy.gif' },
+  { tag: 'gato rindo engraçado', url: 'https://media.giphy.com/media/ICOgUNjpvO0PC/giphy.gif' },
+  { tag: 'joinha ok aprovação', url: 'https://media.giphy.com/media/111ebonMs90YLu/giphy.gif' },
+  { tag: 'mente explodindo choque', url: 'https://media.giphy.com/media/xT0xeJpnrWC4XWblEk/giphy.gif' },
+  { tag: 'gaming vitória', url: 'https://media.giphy.com/media/26u4cqiYI30juCOGY/giphy.gif' },
+  { tag: 'café sono madrugada', url: 'https://media.giphy.com/media/3o6Zt6ML6BklcajjsA/giphy.gif' }
+];
+
+const EMOJI_LIST = [
+  '😀','😂','🥹','😍','😎','🥳','🤔','😴','🤯','🥶','🔥','❤️','💜','🖤','🌙','✨',
+  '👍','👎','👏','🙌','🤝','✌️','🫡','💀','👻','🎧','🎮','💻','☕','🚀','⚡','💯'
+];
+
+const DARK_THEMES = {
+  obsidian: { name: 'Obsidian Pitch (Padrão)', canvas: '#040406', rail: '#07080B', sidebar: '#0B0D12', elevated: '#12151D', hover: '#181C26' },
+  midnight: { name: 'Midnight Void', canvas: '#060913', rail: '#080C18', sidebar: '#0C1222', elevated: '#131B31', hover: '#1A2440' },
+  emerald:  { name: 'Abyssal Forest', canvas: '#040B08', rail: '#06100C', sidebar: '#091611', elevated: '#102019', hover: '#162B22' },
+  crimson:  { name: 'Velvet Crimson', canvas: '#0B0406', rail: '#100609', sidebar: '#16090D', elevated: '#210F15', hover: '#2B141C' },
+  graphite: { name: 'Graphite Matte', canvas: '#0D0E10', rail: '#111215', sidebar: '#16181C', elevated: '#1E2026', hover: '#262930' }
+};
+
+function generateDefaultAvatar(seedText) {
+  const letter = (seedText || 'E')[0].toUpperCase();
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120">
+    <rect width="120" height="120" fill="#13161E"/>
+    <circle cx="60" cy="60" r="46" fill="#6366F1" fill-opacity="0.16"/>
+    <text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" fill="#E5E7EB" font-family="Inter, sans-serif" font-weight="600" font-size="44">${letter}</text>
+  </svg>`;
+  return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+}
+
+function generateEcoId() {
+  const num = Math.floor(1000 + Math.random() * 9000);
+  return `ECO-${num}`;
+}
+
+// Estado Global Único (Sem bots, sem contas fictícias, sem cargos)
+let state = {
+  user: {
+    id: generateEcoId(),
+    displayName: 'Usuário Eco',
+    username: '@usuario',
+    bio: 'Conectado direto via P2P no Eco.',
+    pronouns: '',
+    status: 'online', // online | idle | dnd | invisible
+    customStatus: '',
+    avatar: '',
+    bannerColor: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)',
+    bannerImage: ''
+  },
+  contacts: {}, // { [peerId]: { id, displayName, alias, avatar, bio, status, lastSeen, blocked, unread } }
+  spaces: {},   // { [spaceId]: { id, name, icon, hostId, members: [], channels: [{id, name}], activeChannelId } }
+  messages: {}, // { [threadKey]: [ { id, senderId, senderName, senderAvatar, text, image, gif, audio, audioDuration, replyTo, reactions: {}, pinned, edited, timestamp } ] }
+  settings: {
+    themeKey: 'obsidian',
+    accentColor: '#6366F1',
+    bubbleStyle: 'rounded', // rounded | pill | clean
+    wallpaperType: 'none',  // none | grid | dots | custom
+    wallpaperImage: '',
+    wallpaperOpacity: 25,
+    wallpaperBlur: 0,
+    density: 'comfortable', // comfortable | compact
+    fontSize: 15,
+    avatarShape: 'circle',  // circle | squircle
+    readReceipts: true,
+    typingIndicator: true,
+    blurUnknownMedia: false,
+    allowUnknownIds: true,
+    soundSend: true,
+    soundReceive: true,
+    dndMode: false,
+    desktopNotifs: false,
+    clock24h: true,
+    selectedMicId: ''
+  },
+  ui: {
+    mode: 'dm', // dm | space
+    activeDmId: null,
+    activeSpaceId: null,
+    dmFilter: 'all',
+    inspectorOpen: true,
+    replyingTo: null,
+    editingMsgId: null,
+    pendingImage: null,
+    activeSettingsTab: 'profile'
+  },
+  peerOpen: false
+};
+
+// Variáveis de Runtime WebRTC / PeerJS / Áudio
+let peer = null;
+const dataConnections = {}; // { [peerId]: DataConnection }
+let currentMediaCall = null;
+let localStream = null;
+let callTimerInterval = null;
+let callSeconds = 0;
+
+let mediaRecorder = null;
+let recordedChunks = [];
+let recordingInterval = null;
+let recordingSeconds = 0;
+let micTestStream = null;
+let micTestAnimFrame = null;
+
+// =========================================================
+// PERSISTÊNCIA LOCALSTORAGE COM DEBOUNCE
+// =========================================================
+let saveTimeout = null;
+function saveState() {
+  clearTimeout(saveTimeout);
+  saveTimeout = setTimeout(() => {
+    try {
+      const toSave = {
+        user: state.user,
+        contacts: state.contacts,
+        spaces: state.spaces,
+        messages: state.messages,
+        settings: state.settings
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+    } catch (e) {
+      if (e.name === 'QuotaExceededError') {
+        showToast('Armazenamento cheio! Limpe mídias antigas nas Configurações.');
+      }
+    }
+  }, 250);
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed.user) state.user = { ...state.user, ...parsed.user };
+      if (parsed.contacts) state.contacts = parsed.contacts;
+      if (parsed.spaces) state.spaces = parsed.spaces;
+      if (parsed.messages) state.messages = parsed.messages;
+      if (parsed.settings) state.settings = { ...state.settings, ...parsed.settings };
+    }
+  } catch (e) {
+    console.warn('Falha ao carregar estado:', e);
+  }
+  if (!state.user.avatar) {
+    state.user.avatar = generateDefaultAvatar(state.user.displayName);
+  }
+}
+
+// =========================================================
+// MOTOR DE SOM (WEB AUDIO API PURO)
+// =========================================================
+function playUiSound(type) {
+  if (state.settings.dndMode) return;
+  if (type === 'send' && !state.settings.soundSend) return;
+  if (type === 'receive' && !state.settings.soundReceive) return;
+
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    const now = ctx.currentTime;
+    if (type === 'send') {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(520, now);
+      osc.frequency.exponentialRampToValueAtTime(780, now + 0.08);
+      gain.gain.setValueAtTime(0.05, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+      osc.start(now);
+      osc.stop(now + 0.09);
+    } else if (type === 'receive') {
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(660, now);
+      osc.frequency.setValueAtTime(880, now + 0.07);
+      gain.gain.setValueAtTime(0.06, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+      osc.start(now);
+      osc.stop(now + 0.18);
+    } else if (type === 'call') {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(440, now);
+      osc.frequency.setValueAtTime(554, now + 0.15);
+      gain.gain.setValueAtTime(0.08, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+      osc.start(now);
+      osc.stop(now + 0.35);
+    }
+  } catch (e) {}
+}
+
+// Gera WAV válido silencioso/tom suave caso o navegador bloqueie o microfone
+function createFallbackWavDataUrl(durationSec = 2) {
+  const sampleRate = 8000;
+  const numSamples = sampleRate * durationSec;
+  const buffer = new ArrayBuffer(44 + numSamples);
+  const view = new DataView(buffer);
+  const writeStr = (off, s) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
+  writeStr(0, 'RIFF');
+  view.setUint32(4, 36 + numSamples, true);
+  writeStr(8, 'WAVE');
+  writeStr(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate, true);
+  view.setUint16(32, 1, true);
+  view.setUint16(34, 8, true);
+  writeStr(36, 'data');
+  view.setUint32(40, numSamples, true);
+  for (let i = 0; i < numSamples; i++) {
+    const val = 128 + Math.round(18 * Math.sin((2 * Math.PI * 220 * i) / sampleRate) * Math.exp(-i / (sampleRate * 0.8)));
+    view.setUint8(44 + i, val);
+  }
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+  return 'data:audio/wav;base64,' + btoa(binary);
+}
+
+// =========================================================
+// CONEXÃO PEERJS (REDE P2P REAL & WEBRTC CALLS)
+// =========================================================
+function initPeerNetwork() {
+  if (peer) {
+    try { peer.destroy(); } catch (e) {}
+  }
+
+  peer = new Peer(state.user.id, {
+    debug: 1
+  });
+
+  peer.on('open', (id) => {
+    state.user.id = id;
+    state.peerOpen = true;
+    saveState();
+    updateSelfUi();
+    const dot = document.getElementById('p2p-status-dot');
+    dot.classList.remove('bg-amber-500', 'bg-rose-500');
+    dot.classList.add('bg-emerald-500');
+    dot.title = `Online na Rede P2P (${id})`;
+
+    // Reconectar automaticamente contatos conhecidos
+    Object.keys(state.contacts).forEach(contactId => {
+      if (!state.contacts[contactId].blocked) {
+        establishDataConnection(contactId, true);
+      }
+    });
+  });
+
+  peer.on('connection', (conn) => {
+    setupDataConnectionHandlers(conn);
+  });
+
+  peer.on('call', async (call) => {
+    playUiSound('call');
+    const callerName = state.contacts[call.peer]?.alias || state.contacts[call.peer]?.displayName || call.peer;
+    const accept = confirm(`📞 Chamada P2P recebida de ${callerName} (${call.peer}). Deseja atender?`);
+    if (!accept) {
+      call.close();
+      return;
+    }
+    try {
+      const wantsVideo = call.metadata?.video || false;
+      localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: wantsVideo });
+      document.getElementById('local-video').srcObject = localStream;
+      call.answer(localStream);
+      bindMediaCallEvents(call, callerName);
+    } catch (err) {
+      // Atender apenas recebendo mídia se o usuário não tiver câmera/mic
+      call.answer();
+      bindMediaCallEvents(call, callerName);
+    }
+  });
+
+  peer.on('error', (err) => {
+    console.warn('PeerJS Event:', err.type, err);
+    if (err.type === 'unavailable-id') {
+      state.user.id = generateEcoId();
+      saveState();
+      initPeerNetwork();
+    } else if (err.type === 'peer-unavailable') {
+      showToast('Usuário offline ou ID não encontrado na rede P2P.');
+    }
+  });
+}
+
+function establishDataConnection(targetId, silent = false) {
+  if (!peer || !state.peerOpen) {
+    if (!silent) showToast('Aguardando conexão inicial com a rede P2P...');
+    return null;
+  }
+  if (targetId === state.user.id) {
+    if (!silent) showToast('Você não pode conectar ao seu próprio ID.');
+    return null;
+  }
+  if (dataConnections[targetId] && dataConnections[targetId].open) {
+    return dataConnections[targetId];
+  }
+
+  const conn = peer.connect(targetId, { reliable: true });
+  setupDataConnectionHandlers(conn, silent);
+  return conn;
+}
+
+function setupDataConnectionHandlers(conn, silent = false) {
+  dataConnections[conn.peer] = conn;
+
+  conn.on('open', () => {
+    if (!state.contacts[conn.peer]) {
+      state.contacts[conn.peer] = {
+        id: conn.peer,
+        displayName: conn.peer,
+        alias: '',
+        avatar: generateDefaultAvatar(conn.peer),
+        bio: 'Usuário conectado via Eco P2P',
+        status: 'online',
+        blocked: false,
+        unread: 0
+      };
+    } else {
+      state.contacts[conn.peer].status = 'online';
+    }
+
+    // Enviar handshake com nosso perfil real
+    conn.send({
+      type: 'PROFILE_SYNC',
+      profile: {
+        id: state.user.id,
+        displayName: state.user.displayName,
+        username: state.user.username,
+        bio: state.user.bio,
+        status: state.user.status,
+        customStatus: state.user.customStatus,
+        avatar: state.user.avatar
+      }
+    });
+
+    saveState();
+    renderNavList();
+    renderInspector();
+    if (!silent) showToast(`Conectado a ${state.contacts[conn.peer].alias || conn.peer}!`);
+  });
+
+  conn.on('data', (payload) => {
+    handleIncomingPeerData(conn.peer, payload);
+  });
+
+  conn.on('close', () => {
+    if (state.contacts[conn.peer]) {
+      state.contacts[conn.peer].status = 'offline';
+      renderNavList();
+      updateChatHeader();
+    }
+  });
+}
+
+function handleIncomingPeerData(senderId, payload) {
+  if (!payload || !payload.type) return;
+  if (state.contacts[senderId]?.blocked) return;
+
+  switch (payload.type) {
+    case 'PROFILE_SYNC': {
+      const p = payload.profile;
+      const existing = state.contacts[senderId] || { id: senderId, alias: '', blocked: false, unread: 0 };
+      state.contacts[senderId] = {
+        ...existing,
+        displayName: p.displayName || senderId,
+        username: p.username || '',
+        bio: p.bio || '',
+        status: p.status || 'online',
+        customStatus: p.customStatus || '',
+        avatar: p.avatar || existing.avatar || generateDefaultAvatar(p.displayName || senderId)
+      };
+      saveState();
+      renderNavList();
+      updateChatHeader();
+      renderInspector();
+      break;
+    }
+
+    case 'DM_MESSAGE': {
+      const threadKey = `dm_${senderId}`;
+      if (!state.messages[threadKey]) state.messages[threadKey] = [];
+      state.messages[threadKey].push(payload.message);
+
+      const isViewingThis = state.ui.mode === 'dm' && state.ui.activeDmId === senderId;
+      if (!isViewingThis) {
+        if (!state.contacts[senderId]) {
+          state.contacts[senderId] = { id: senderId, displayName: payload.message.senderName, avatar: payload.message.senderAvatar, status: 'online', unread: 0 };
+        }
+        state.contacts[senderId].unread = (state.contacts[senderId].unread || 0) + 1;
+      } else if (state.settings.readReceipts && dataConnections[senderId]?.open) {
+        dataConnections[senderId].send({ type: 'READ_ACK', threadKey });
+      }
+
+      playUiSound('receive');
+      triggerDesktopNotification(payload.message.senderName, payload.message.text || 'Enviou uma mídia');
+      saveState();
+      renderNavList();
+      if (isViewingThis) {
+        renderMessages();
+        renderInspector();
+      }
+      break;
+    }
+
+    case 'TYPING': {
+      if (state.ui.mode === 'dm' && state.ui.activeDmId === senderId) {
+        const sub = document.getElementById('chat-header-subtitle');
+        sub.textContent = 'digitando...';
+        sub.style.color = 'var(--accent)';
+        clearTimeout(window._typingClearTimer);
+        window._typingClearTimer = setTimeout(() => {
+          updateChatHeader();
+        }, 2200);
+      }
+      break;
+    }
+
+    case 'MSG_REACTION': {
+      const list = state.messages[payload.threadKey];
+      if (!list) return;
+      const msg = list.find(m => m.id === payload.msgId);
+      if (msg) {
+        if (!msg.reactions) msg.reactions = {};
+        if (!msg.reactions[payload.emoji]) msg.reactions[payload.emoji] = [];
+        const idx = msg.reactions[payload.emoji].indexOf(senderId);
+        if (idx === -1) msg.reactions[payload.emoji].push(senderId);
+        else msg.reactions[payload.emoji].splice(idx, 1);
+        saveState();
+        renderMessages();
+      }
+      break;
+    }
+
+    case 'SPACE_INVITE_REQUEST': {
+      // Um usuário pediu para entrar em um espaço hospedado por nós
+      const sp = state.spaces[payload.spaceId];
+      if (sp) {
+        if (!sp.members.includes(senderId)) sp.members.push(senderId);
+        saveState();
+        dataConnections[senderId]?.send({
+          type: 'SPACE_STATE_SYNC',
+          space: sp,
+          messagesByChannel: Object.fromEntries(
+            sp.channels.map(ch => [`space_${sp.id}_${ch.id}`, state.messages[`space_${sp.id}_${ch.id}`] || []])
+          )
+        });
+        renderInspector();
+      }
+      break;
+    }
+
+    case 'SPACE_STATE_SYNC': {
+      const sp = payload.space;
+      state.spaces[sp.id] = sp;
+      Object.entries(payload.messagesByChannel || {}).forEach(([k, msgs]) => {
+        state.messages[k] = msgs;
+      });
+      state.ui.mode = 'space';
+      state.ui.activeSpaceId = sp.id;
+      saveState();
+      renderLeftRail();
+      switchMode('space', sp.id);
+      showToast(`Você entrou no espaço "${sp.name}"!`);
+      break;
+    }
+
+    case 'SPACE_MESSAGE': {
+      const { spaceId, channelId, message } = payload;
+      const key = `space_${spaceId}_${channelId}`;
+      if (!state.messages[key]) state.messages[key] = [];
+      if (!state.messages[key].some(m => m.id === message.id)) {
+        state.messages[key].push(message);
+        // Se somos o host do espaço, retransmitir aos demais membros
+        const sp = state.spaces[spaceId];
+        if (sp && sp.hostId === state.user.id) {
+          sp.members.forEach(mId => {
+            if (mId !== state.user.id && mId !== senderId && dataConnections[mId]?.open) {
+              dataConnections[mId].send(payload);
+            }
+          });
+        }
+        playUiSound('receive');
+        saveState();
+        if (state.ui.mode === 'space' && state.ui.activeSpaceId === spaceId && sp?.activeChannelId === channelId) {
+          renderMessages();
+        }
+      }
+      break;
+    }
+  }
+}
+
+// =========================================================
+// CHAMADAS WEBRTC (VOZ, VÍDEO E COMPARTILHAMENTO DE TELA)
+// =========================================================
+async function startWebRTCCall(withVideo = false) {
+  if (state.ui.mode !== 'dm' || !state.ui.activeDmId) return;
+  const targetId = state.ui.activeDmId;
+  if (!peer || !state.peerOpen) return showToast('Rede P2P ainda conectando.');
+
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: withVideo });
+    document.getElementById('local-video').srcObject = localStream;
+    const call = peer.call(targetId, localStream, { metadata: { video: withVideo } });
+    const contactName = state.contacts[targetId]?.alias || state.contacts[targetId]?.displayName || targetId;
+    bindMediaCallEvents(call, contactName);
+    showToast(`Chamando ${contactName}...`);
+  } catch (err) {
+    showToast('Erro ao acessar microfone/câmera: ' + err.message);
+  }
+}
+
+async function startScreenShareCall() {
+  if (state.ui.mode !== 'dm' || !state.ui.activeDmId) return;
+  const targetId = state.ui.activeDmId;
+  try {
+    const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+    try {
+      const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micStream.getAudioTracks().forEach(t => screenStream.addTrack(t));
+    } catch (e) {}
+    localStream = screenStream;
+    document.getElementById('local-video').srcObject = localStream;
+    const call = peer.call(targetId, localStream, { metadata: { video: true, screen: true } });
+    const contactName = state.contacts[targetId]?.alias || state.contacts[targetId]?.displayName || targetId;
+    bindMediaCallEvents(call, contactName);
+    showToast('Compartilhando tela via WebRTC...');
+  } catch (err) {
+    showToast('Compartilhamento de tela cancelado.');
+  }
+}
+
+function bindMediaCallEvents(call, peerName) {
+  currentMediaCall = call;
+  document.getElementById('webrtc-call-banner').classList.remove('hidden');
+  document.getElementById('call-status-text').textContent = `Em chamada P2P com ${peerName}`;
+  document.getElementById('remote-video-label').textContent = peerName;
+
+  callSeconds = 0;
+  clearInterval(callTimerInterval);
+  callTimerInterval = setInterval(() => {
+    callSeconds++;
+    document.getElementById('call-timer').textContent = formatDuration(callSeconds);
+  }, 1000);
+
+  call.on('stream', (remoteStream) => {
+    document.getElementById('remote-video').srcObject = remoteStream;
+  });
+
+  call.on('close', () => endActiveCall());
+  call.on('error', () => endActiveCall());
+}
+
+function toggleCallMute() {
+  if (!localStream) return;
+  const track = localStream.getAudioTracks()[0];
+  if (track) {
+    track.enabled = !track.enabled;
+    document.getElementById('btn-call-mute').classList.toggle('bg-rose-600', !track.enabled);
+    showToast(track.enabled ? 'Microfone ativado' : 'Microfone mutado');
+  }
+}
+
+function toggleCallCamera() {
+  if (!localStream) return;
+  const track = localStream.getVideoTracks()[0];
+  if (track) {
+    track.enabled = !track.enabled;
+    document.getElementById('btn-call-cam').classList.toggle('bg-rose-600', !track.enabled);
+    showToast(track.enabled ? 'Câmera ativada' : 'Câmera pausada');
+  }
+}
+
+async function toggleScreenShare() {
+  if (!currentMediaCall || !currentMediaCall.peerConnection) return;
+  try {
+    const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+    const screenTrack = screenStream.getVideoTracks()[0];
+    const sender = currentMediaCall.peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
+    if (sender) {
+      sender.replaceTrack(screenTrack);
+    }
+    document.getElementById('local-video').srcObject = screenStream;
+    showToast('Tela compartilhada na chamada!');
+    screenTrack.onended = () => {
+      if (localStream && localStream.getVideoTracks()[0] && sender) {
+        sender.replaceTrack(localStream.getVideoTracks()[0]);
+        document.getElementById('local-video').srcObject = localStream;
+      }
+    };
+  } catch (e) {
+    showToast('Compartilhamento de tela cancelado.');
+  }
+}
+
+function endActiveCall() {
+  if (currentMediaCall) {
+    try { currentMediaCall.close(); } catch (e) {}
+    currentMediaCall = null;
+  }
+  if (localStream) {
+    localStream.getTracks().forEach(t => t.stop());
+    localStream = null;
+  }
+  clearInterval(callTimerInterval);
+  document.getElementById('webrtc-call-banner').classList.add('hidden');
+  document.getElementById('remote-video').srcObject = null;
+  document.getElementById('local-video').srcObject = null;
+}
+
+// =========================================================
+// CONEXÃO COM USUÁRIO REAL POR ID & ESPAÇOS P2P
+// =========================================================
+function connectToRemotePeer() {
+  const rawId = document.getElementById('target-peer-id-input').value.trim();
+  const alias = document.getElementById('target-peer-alias-input').value.trim();
+  if (!rawId) return showToast('Digite o ID do usuário.');
+  if (rawId === state.user.id) return showToast('Esse é o seu próprio ID.');
+
+  if (!state.contacts[rawId]) {
+    state.contacts[rawId] = {
+      id: rawId,
+      displayName: alias || rawId,
+      alias: alias,
+      avatar: generateDefaultAvatar(alias || rawId),
+      bio: 'Aguardando sincronização P2P...',
+      status: 'offline',
+      blocked: false,
+      unread: 0
+    };
+  } else if (alias) {
+    state.contacts[rawId].alias = alias;
+  }
+
+  saveState();
+  establishDataConnection(rawId, false);
+  closeModal('add-contact-modal');
+  document.getElementById('target-peer-id-input').value = '';
+  document.getElementById('target-peer-alias-input').value = '';
+  switchMode('dm');
+  openDmConversation(rawId);
+}
+
+function createNewSpace() {
+  const name = document.getElementById('new-space-name').value.trim();
+  const icon = document.getElementById('new-space-icon').value.trim() || '🌙';
+  if (!name) return showToast('Digite um nome para o espaço.');
+
+  const spaceId = 'SPACE-' + Math.floor(1000 + Math.random() * 9000);
+  const inviteCode = `${state.user.id}::${spaceId}`;
+  state.spaces[spaceId] = {
+    id: spaceId,
+    name,
+    icon,
+    hostId: state.user.id,
+    inviteCode,
+    members: [state.user.id],
+    channels: [
+      { id: 'geral', name: 'geral' },
+      { id: 'midia', name: 'mídia' },
+      { id: 'ideias', name: 'ideias' }
+    ],
+    activeChannelId: 'geral'
+  };
+
+  saveState();
+  closeModal('space-modal');
+  document.getElementById('new-space-name').value = '';
+  renderLeftRail();
+  switchMode('space', spaceId);
+  showToast(`Espaço "${name}" criado!`);
+}
+
+function joinSpaceByCode() {
+  const code = document.getElementById('join-space-code').value.trim();
+  if (!code.includes('::')) return showToast('Código inválido. Use o formato HOST_ID::SPACE_ID');
+  const [hostId, spaceId] = code.split('::');
+  const conn = establishDataConnection(hostId, true);
+  if (!conn) return;
+
+  const sendReq = () => conn.send({ type: 'SPACE_INVITE_REQUEST', spaceId });
+  if (conn.open) sendReq();
+  else conn.on('open', sendReq);
+
+  closeModal('space-modal');
+  showToast('Solicitando entrada na sala P2P...');
+}
+
+function copyActiveSpaceCode() {
+  const sp = state.spaces[state.ui.activeSpaceId];
+  if (!sp) return;
+  copyText(sp.inviteCode, 'Código de convite P2P copiado!');
+}
+
+function openCreateChannelModal() {
+  const sp = state.spaces[state.ui.activeSpaceId];
+  if (!sp) return;
+  const chName = prompt('Nome do novo canal de texto (sem espaços):');
+  if (!chName) return;
+  const clean = chName.toLowerCase().replace(/[^a-z0-9-_]/g, '-');
+  if (!clean) return;
+  sp.channels.push({ id: clean + '-' + Date.now().toString().slice(-3), name: clean });
+  saveState();
+  renderNavList();
+}
+
+function leaveActiveSpace() {
+  const sp = state.spaces[state.ui.activeSpaceId];
+  if (!sp) return;
+  if (!confirm(`Sair do espaço "${sp.name}"?`)) return;
+  delete state.spaces[sp.id];
+  state.ui.activeSpaceId = null;
+  saveState();
+  renderLeftRail();
+  switchMode('dm');
+}
+
+// =========================================================
+// MENSAGENS, MÍDIAS, ÁUDIO DE VOZ, REAÇÕES & MARKDOWN
+// =========================================================
+function getActiveThreadKey() {
+  if (state.ui.mode === 'dm' && state.ui.activeDmId) {
+    return `dm_${state.ui.activeDmId}`;
+  }
+  if (state.ui.mode === 'space' && state.ui.activeSpaceId) {
+    const sp = state.spaces[state.ui.activeSpaceId];
+    if (sp) return `space_${sp.id}_${sp.activeChannelId}`;
+  }
+  return null;
+}
+
+function sendCurrentMessage(extraPayload = {}) {
+  const threadKey = getActiveThreadKey();
+  if (!threadKey) return;
+
+  const textarea = document.getElementById('msg-textarea');
+  const text = textarea.value.trim();
+  const image = state.ui.pendingImage;
+
+  if (!text && !image && !extraPayload.gif && !extraPayload.audio) return;
+
+  // Se estiver editando mensagem existente
+  if (state.ui.editingMsgId) {
+    const list = state.messages[threadKey] || [];
+    const target = list.find(m => m.id === state.ui.editingMsgId);
+    if (target && text) {
+      target.text = text;
+      target.edited = true;
+    }
+    clearComposerContext();
+    textarea.value = '';
+    updateComposerButtons();
+    saveState();
+    renderMessages();
+    return;
+  }
+
+  const msg = {
+    id: 'msg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+    senderId: state.user.id,
+    senderName: state.user.displayName,
+    senderAvatar: state.user.avatar,
+    text,
+    image: image || null,
+    gif: extraPayload.gif || null,
+    audio: extraPayload.audio || null,
+    audioDuration: extraPayload.audioDuration || 0,
+    replyTo: state.ui.replyingTo ? { ...state.ui.replyingTo } : null,
+    reactions: {},
+    pinned: false,
+    edited: false,
+    timestamp: Date.now()
+  };
+
+  if (!state.messages[threadKey]) state.messages[threadKey] = [];
+  state.messages[threadKey].push(msg);
+
+  // Enviar via PeerJS se estiver conectado
+  if (state.ui.mode === 'dm') {
+    const targetId = state.ui.activeDmId;
+    const conn = establishDataConnection(targetId, true);
+    if (conn && conn.open) {
+      conn.send({ type: 'DM_MESSAGE', message: msg });
+    }
+  } else if (state.ui.mode === 'space') {
+    const sp = state.spaces[state.ui.activeSpaceId];
+    if (sp) {
+      const payload = { type: 'SPACE_MESSAGE', spaceId: sp.id, channelId: sp.activeChannelId, message: msg };
+      sp.members.forEach(mId => {
+        if (mId !== state.user.id && dataConnections[mId]?.open) {
+          dataConnections[mId].send(payload);
+        }
+      });
+    }
+  }
+
+  textarea.value = '';
+  textarea.style.height = 'auto';
+  clearComposerContext();
+  clearPendingImage();
+  updateComposerButtons();
+  playUiSound('send');
+  saveState();
+  renderMessages();
+  renderNavList();
+  renderInspector();
+}
+
+// Gravação de Voz Real (MediaRecorder + Fallback WAV)
+async function startVoiceRecording() {
+  if (!getActiveThreadKey()) return;
+  document.getElementById('composer-normal-mode').classList.add('hidden');
+  document.getElementById('composer-recording-mode').classList.remove('hidden');
+  document.getElementById('composer-recording-mode').classList.add('flex');
+
+  recordingSeconds = 0;
+  document.getElementById('recording-timer').textContent = '00:00';
+  recordingInterval = setInterval(() => {
+    recordingSeconds++;
+    document.getElementById('recording-timer').textContent = formatDuration(recordingSeconds);
+  }, 1000);
+
+  recordedChunks = [];
+  try {
+    const constraints = state.settings.selectedMicId
+      ? { audio: { deviceId: { exact: state.settings.selectedMicId } } }
+      : { audio: true };
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    mediaRecorder = new MediaRecorder(stream);
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) recordedChunks.push(e.data);
+    };
+    mediaRecorder.start();
+  } catch (err) {
+    mediaRecorder = null; // Usará fallback WAV ao finalizar
+  }
+}
+
+function cancelVoiceRecording() {
+  clearInterval(recordingInterval);
+  if (mediaRecorder) {
+    try {
+      mediaRecorder.stream.getTracks().forEach(t => t.stop());
+      mediaRecorder.stop();
+    } catch (e) {}
+    mediaRecorder = null;
+  }
+  resetRecordingUi();
+}
+
+function finishAndSendVoiceRecording() {
+  clearInterval(recordingInterval);
+  const dur = Math.max(1, recordingSeconds);
+
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(recordedChunks, { type: 'audio/webm' });
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        sendCurrentMessage({ audio: reader.result, audioDuration: dur });
+      };
+      reader.readAsDataURL(blob);
+      mediaRecorder.stream.getTracks().forEach(t => t.stop());
+      mediaRecorder = null;
+    };
+    mediaRecorder.stop();
+  } else {
+    const fallbackUrl = createFallbackWavDataUrl(Math.min(dur, 4));
+    sendCurrentMessage({ audio: fallbackUrl, audioDuration: dur });
+  }
+  resetRecordingUi();
+}
+
+function resetRecordingUi() {
+  document.getElementById('composer-recording-mode').classList.add('hidden');
+  document.getElementById('composer-recording-mode').classList.remove('flex');
+  document.getElementById('composer-normal-mode').classList.remove('hidden');
+}
+
+// Upload / Colar / Arrastar Imagens do PC
+function processImageFile(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    state.ui.pendingImage = e.target.result;
+    document.getElementById('pending-image-thumb').src = e.target.result;
+    document.getElementById('image-preview-bar').classList.remove('hidden');
+    updateComposerButtons();
+  };
+  reader.readAsDataURL(file);
+}
+
+function handleChatFileSelect(e) {
+  if (e.target.files[0]) processImageFile(e.target.files[0]);
+  e.target.value = '';
+}
+function handleComposerPaste(e) {
+  const items = e.clipboardData?.items || [];
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      processImageFile(item.getAsFile());
+      break;
+    }
+  }
+}
+function handleDragOver(e) { e.preventDefault(); }
+function handleDropImage(e) {
+  e.preventDefault();
+  if (e.dataTransfer?.files?.[0]) processImageFile(e.dataTransfer.files[0]);
+}
+function clearPendingImage() {
+  state.ui.pendingImage = null;
+  document.getElementById('image-preview-bar').classList.add('hidden');
+  updateComposerButtons();
+}
+
+// =========================================================
+// RENDERIZAÇÃO DE INTERFACE (RAIL, SIDEBAR, FEED, INSPECTOR)
+// =========================================================
+function renderLeftRail() {
+  const container = document.getElementById('spaces-list');
+  container.innerHTML = '';
+
+  const dmBtn = document.getElementById('btn-mode-dm');
+  const dmPill = document.getElementById('dm-pill');
+  dmPill.style.opacity = state.ui.mode === 'dm' ? '1' : '0';
+
+  // Total DMs não lidas
+  const totalUnread = Object.values(state.contacts).reduce((acc, c) => acc + (c.unread || 0), 0);
+  const badge = document.getElementById('dm-unread-badge');
+  badge.textContent = totalUnread;
+  badge.classList.toggle('hidden', totalUnread === 0);
+
+  Object.values(state.spaces).forEach(sp => {
+    const active = state.ui.mode === 'space' && state.ui.activeSpaceId === sp.id;
+    const btn = document.createElement('button');
+    btn.title = sp.name;
+    btn.onclick = () => switchMode('space', sp.id);
+    btn.className = `relative w-11 h-11 flex items-center justify-center text-base transition-all duration-200 ${active ? 'rounded-2xl text-white' : 'rounded-full hover:rounded-2xl text-gray-300'}`;
+    btn.style.background = active ? 'var(--accent)' : 'var(--bg-elevated)';
+    btn.style.border = '1px solid var(--border-subtle)';
+    btn.innerHTML = `
+      ${active ? '<span class="absolute -left-2 w-1 h-6 rounded-r-full" style="background: var(--accent);"></span>' : ''}
+      <span>${escapeHtml(sp.icon)}</span>
+    `;
+    container.appendChild(btn);
+  });
+}
+
+function switchMode(mode, spaceId = null) {
+  state.ui.mode = mode;
+  if (mode === 'space' && spaceId) {
+    state.ui.activeSpaceId = spaceId;
+  }
+  document.getElementById('nav-dm-header').classList.toggle('hidden', mode !== 'dm');
+  document.getElementById('nav-space-header').classList.toggle('hidden', mode !== 'space');
+  document.getElementById('nav-space-header').classList.toggle('flex', mode === 'space');
+
+  renderLeftRail();
+  renderNavList();
+  updateChatHeader();
+  renderMessages();
+  renderInspector();
+}
+
+function setDmFilter(f) {
+  state.ui.dmFilter = f;
+  ['all', 'unread', 'online'].forEach(k => {
+    const el = document.getElementById(`filter-${k}`);
+    if (k === f) {
+      el.style.background = 'var(--accent-soft)';
+      el.style.color = 'var(--accent)';
+    } else {
+      el.style.background = 'transparent';
+      el.style.color = 'var(--text-secondary)';
+    }
+  });
+  renderNavList();
+}
+
+function renderNavList() {
+  const container = document.getElementById('nav-list-container');
+  container.innerHTML = '';
+
+  if (state.ui.mode === 'dm') {
+    const query = document.getElementById('dm-search-input').value.toLowerCase();
+    const contacts = Object.values(state.contacts).filter(c => {
+      if (c.blocked) return false;
+      if (state.ui.dmFilter === 'unread' && !(c.unread > 0)) return false;
+      if (state.ui.dmFilter === 'online' && c.status !== 'online') return false;
+      const name = (c.alias || c.displayName || c.id).toLowerCase();
+      return name.includes(query) || c.id.toLowerCase().includes(query);
+    });
+
+    if (contacts.length === 0) {
+      container.innerHTML = `
+        <div class="text-center py-10 px-4 space-y-2">
+          <div class="text-xs text-gray-400">Nenhuma conversa ativa</div>
+          <p class="text-[11px] text-gray-500">Clique em <strong>Conectar ID</strong> acima e insira o ID de um usuário real.</p>
+        </div>`;
+      return;
+    }
+
+    contacts.forEach(c => {
+      const threadMsgs = state.messages[`dm_${c.id}`] || [];
+      const lastMsg = threadMsgs[threadMsgs.length - 1];
+      const active = state.ui.activeDmId === c.id;
+      const statusColor = c.status === 'online' ? 'bg-emerald-500' : 'bg-zinc-600';
+
+      let preview = 'Clique para conversar';
+      if (lastMsg) {
+        if (lastMsg.audio) preview = `🎤 Áudio (${formatDuration(lastMsg.audioDuration)})`;
+        else if (lastMsg.image) preview = '📷 Foto';
+        else if (lastMsg.gif) preview = '🎬 GIF';
+        else preview = lastMsg.text;
+      }
+
+      const item = document.createElement('button');
+      item.onclick = () => openDmConversation(c.id);
+      item.className = `w-full flex items-center gap-3 p-2.5 rounded-2xl text-left transition ${active ? 'bg-white/10' : 'hover:bg-white/5'}`;
+      item.innerHTML = `
+        <div class="relative shrink-0">
+          <img src="${c.avatar || generateDefaultAvatar(c.displayName)}" class="w-10 h-10 object-cover avatar-shape bg-zinc-900" />
+          <span class="w-2.5 h-2.5 rounded-full ${statusColor} ring-2 ring-[#0B0D12] absolute bottom-0 right-0"></span>
+        </div>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center justify-between gap-1">
+            <span class="text-xs font-semibold truncate">${escapeHtml(c.alias || c.displayName)}</span>
+            <span class="text-[10px] text-gray-500 font-mono-id">${lastMsg ? formatTime(lastMsg.timestamp) : ''}</span>
+          </div>
+          <div class="flex items-center justify-between gap-1 mt-0.5">
+            <span class="text-[11px] text-gray-400 truncate">${escapeHtml(preview)}</span>
+            ${c.unread > 0 ? `<span class="min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center text-white" style="background: var(--accent);">${c.unread}</span>` : ''}
+          </div>
+        </div>
+      `;
+      container.appendChild(item);
+    });
+  } else {
+    const sp = state.spaces[state.ui.activeSpaceId];
+    if (!sp) return;
+    document.getElementById('active-space-title').textContent = sp.name;
+    document.getElementById('active-space-code-label').textContent = sp.inviteCode;
+
+    // Canais de Texto Simples (Sem cargos/tags)
+    const label = document.createElement('div');
+    label.className = 'px-2 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500';
+    label.textContent = 'Canais de Texto';
+    container.appendChild(label);
+
+    sp.channels.forEach(ch => {
+      const isSelected = sp.activeChannelId === ch.id;
+      const btn = document.createElement('button');
+      btn.onclick = () => {
+        sp.activeChannelId = ch.id;
+        saveState();
+        renderNavList();
+        updateChatHeader();
+        renderMessages();
+      };
+      btn.className = `w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition ${isSelected ? 'bg-white/10 text-white font-medium' : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'}`;
+      btn.innerHTML = `<span class="flex items-center gap-2"><span class="text-gray-500">#</span>${escapeHtml(ch.name)}</span>`;
+      container.appendChild(btn);
+    });
+  }
+  lucide.createIcons();
+}
+
+function openDmConversation(contactId) {
+  state.ui.mode = 'dm';
+  state.ui.activeDmId = contactId;
+  if (state.contacts[contactId]) {
+    state.contacts[contactId].unread = 0;
+  }
+  establishDataConnection(contactId, true);
+  saveState();
+  renderLeftRail();
+  renderNavList();
+  updateChatHeader();
+  renderMessages();
+  renderInspector();
+}
+
+function updateChatHeader() {
+  const titleEl = document.getElementById('chat-header-title');
+  const subEl = document.getElementById('chat-header-subtitle');
+  const badgeEl = document.getElementById('chat-header-badge');
+  const avatarEl = document.getElementById('chat-header-avatar');
+  const composer = document.getElementById('composer-footer');
+  const welcome = document.getElementById('empty-welcome-screen');
+
+  const callBtns = ['btn-voice-call', 'btn-video-call', 'btn-screen-call'];
+
+  if (state.ui.mode === 'dm' && state.ui.activeDmId && state.contacts[state.ui.activeDmId]) {
+    const c = state.contacts[state.ui.activeDmId];
+    welcome.classList.add('hidden');
+    composer.classList.remove('hidden');
+    callBtns.forEach(id => document.getElementById(id).classList.remove('hidden'));
+
+    avatarEl.innerHTML = `<img src="${c.avatar || generateDefaultAvatar(c.displayName)}" class="w-9 h-9 object-cover avatar-shape" />`;
+    titleEl.textContent = c.alias || c.displayName;
+    badgeEl.textContent = c.id;
+    badgeEl.classList.remove('hidden');
+    subEl.textContent = c.status === 'online' ? 'Online via P2P' : 'Offline (mensagens enviam ao reconectar)';
+    subEl.style.color = c.status === 'online' ? '#10B981' : '#9CA3AF';
+  } else if (state.ui.mode === 'space' && state.ui.activeSpaceId && state.spaces[state.ui.activeSpaceId]) {
+    const sp = state.spaces[state.ui.activeSpaceId];
+    const ch = sp.channels.find(x => x.id === sp.activeChannelId) || sp.channels[0];
+    welcome.classList.add('hidden');
+    composer.classList.remove('hidden');
+    callBtns.forEach(id => document.getElementById(id).classList.add('hidden'));
+
+    avatarEl.innerHTML = `<div class="w-9 h-9 rounded-xl flex items-center justify-center text-base" style="background: var(--bg-elevated);">${escapeHtml(sp.icon)}</div>`;
+    titleEl.textContent = `# ${ch ? ch.name : 'geral'}`;
+    badgeEl.textContent = sp.name;
+    badgeEl.classList.remove('hidden');
+    subEl.textContent = `${sp.members.length} participante(s) na sala P2P`;
+    subEl.style.color = '#9CA3AF';
+  } else {
+    welcome.classList.remove('hidden');
+    composer.classList.add('hidden');
+    callBtns.forEach(id => document.getElementById(id).classList.add('hidden'));
+    avatarEl.innerHTML = '';
+    titleEl.textContent = 'Eco';
+    badgeEl.classList.add('hidden');
+    subEl.textContent = 'Pronto para conectar';
+  }
+}
+
+function renderMessages() {
+  const feed = document.getElementById('messages-feed');
+  const welcome = document.getElementById('empty-welcome-screen');
+  const threadKey = getActiveThreadKey();
+
+  Array.from(feed.children).forEach(child => {
+    if (child.id !== 'empty-welcome-screen') child.remove();
+  });
+
+  if (!threadKey) {
+    welcome.classList.remove('hidden');
+    return;
+  }
+  welcome.classList.add('hidden');
+
+  const filterTerm = document.getElementById('chat-in-search').value.toLowerCase();
+  const list = (state.messages[threadKey] || []).filter(m => !filterTerm || (m.text || '').toLowerCase().includes(filterTerm));
+
+  // Atualizar badge de mensagens fixadas
+  const pinnedCount = list.filter(m => m.pinned).length;
+  document.getElementById('pinned-count-badge').classList.toggle('hidden', pinnedCount === 0);
+
+  if (list.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'text-center text-xs text-gray-500 py-12';
+    empty.textContent = 'Nenhuma mensagem aqui ainda. Diga oi, envie uma foto do PC ou grave um áudio!';
+    feed.appendChild(empty);
+    return;
+  }
+
+  const isCompact = state.settings.density === 'compact';
+
+  list.forEach((msg, idx) => {
+    const isSelf = msg.senderId === state.user.id;
+    const prev = list[idx - 1];
+    const grouped = prev && prev.senderId === msg.senderId && (msg.timestamp - prev.timestamp < 180000);
+
+    const row = document.createElement('div');
+    row.id = `msg-row-${msg.id}`;
+    row.className = `group relative flex gap-3 px-2 rounded-2xl hover:bg-white/[0.025] transition ${grouped ? (isCompact ? 'py-0.5' : 'py-1') : 'pt-3 pb-1'} ${isSelf ? 'justify-end' : 'justify-start'}`;
+
+    const reactionsHtml = Object.entries(msg.reactions || {})
+      .filter(([, users]) => users.length > 0)
+      .map(([emoji, users]) => `
+        <button onclick="toggleMessageReaction('${msg.id}', '${emoji}')"
+                class="px-2 py-0.5 rounded-full text-[11px] flex items-center gap-1 border transition ${users.includes(state.user.id) ? 'border-indigo-500/50 bg-indigo-500/15' : 'border-white/10 bg-white/5'}">
+          <span>${emoji}</span><span class="text-[10px] text-gray-300">${users.length}</span>
+        </button>
+      `).join('');
+
+    let bubbleBg = isSelf ? 'var(--accent)' : 'var(--bg-elevated)';
+    if (state.settings.bubbleStyle === 'clean') bubbleBg = 'transparent';
+    const bubbleRadiusClass = state.settings.bubbleStyle === 'pill' ? 'rounded-3xl' : 'msg-bubble';
+
+    row.innerHTML = `
+      ${!isSelf ? `
+        <div class="w-8 shrink-0">
+          ${!grouped ? `<img src="${msg.senderAvatar || generateDefaultAvatar(msg.senderName)}" class="w-8 h-8 object-cover avatar-shape" />` : ''}
+        </div>
+      ` : ''}
+
+      <div class="max-w-[75%] flex flex-col ${isSelf ? 'items-end' : 'items-start'}">
+        ${!grouped ? `
+          <div class="flex items-center gap-2 mb-1 px-1">
+            <span class="text-[11px] font-semibold text-gray-300">${escapeHtml(msg.senderName)}</span>
+            <span class="text-[10px] text-gray-500 font-mono-id">${formatTime(msg.timestamp)}</span>
+            ${msg.pinned ? '<span class="text-[10px] text-amber-400">📌 Fixada</span>' : ''}
+          </div>
+        ` : ''}
+
+        ${msg.replyTo ? `
+          <div onclick="scrollToMessage('${msg.replyTo.id}')" class="cursor-pointer mb-1 px-2.5 py-1 rounded-xl text-[11px] border-l-2 bg-white/5 text-gray-400 truncate max-w-full" style="border-color: var(--accent);">
+            <span class="font-semibold text-gray-300">${escapeHtml(msg.replyTo.senderName)}:</span> ${escapeHtml(msg.replyTo.text || 'Mídia')}
+          </div>
+        ` : ''}
+
+        <div class="px-3.5 py-2 ${bubbleRadiusClass} text-sm break-words shadow-sm"
+             style="background: ${bubbleBg}; color: ${isSelf && state.settings.bubbleStyle !== 'clean' ? '#FFFFFF' : 'var(--text-primary)'};">
+          ${msg.image ? `<img src="${msg.image}" onclick="openLightbox('${msg.image}')" class="max-h-64 rounded-xl mb-1.5 cursor-zoom-in object-cover" />` : ''}
+          ${msg.gif ? `<img src="${msg.gif}" class="max-h-52 rounded-xl mb-1.5 object-cover" />` : ''}
+          ${msg.audio ? renderAudioPlayerHtml(msg) : ''}
+          ${msg.text ? `<div class="leading-relaxed">${parseSafeMarkdown(msg.text)}</div>` : ''}
+          ${msg.edited ? `<span class="text-[10px] opacity-70 ml-1">(editada)</span>` : ''}
+        </div>
+
+        ${reactionsHtml ? `<div class="flex flex-wrap gap-1 mt-1">${reactionsHtml}</div>` : ''}
+      </div>
+
+      <!-- Barra Flutuante de Ações -->
+      <div class="hidden group-hover:flex items-center gap-0.5 absolute -top-3 ${isSelf ? 'left-4' : 'right-4'} px-1.5 py-1 rounded-xl border shadow-lg z-10"
+           style="background: var(--bg-elevated); border-color: var(--border-focus);">
+        <button onclick="toggleMessageReaction('${msg.id}', '❤️')" class="p-1 hover:bg-white/10 rounded text-xs">❤️</button>
+        <button onclick="toggleMessageReaction('${msg.id}', '😂')" class="p-1 hover:bg-white/10 rounded text-xs">😂</button>
+        <button onclick="toggleMessageReaction('${msg.id}', '🔥')" class="p-1 hover:bg-white/10 rounded text-xs">🔥</button>
+        <button onclick="startReplyToMessage('${msg.id}')" title="Responder" class="p-1 hover:bg-white/10 rounded text-gray-300"><i data-lucide="reply" class="w-3.5 h-3.5"></i></button>
+        <button onclick="togglePinMessage('${msg.id}')" title="Fixar" class="p-1 hover:bg-white/10 rounded text-gray-300"><i data-lucide="pin" class="w-3.5 h-3.5"></i></button>
+        ${isSelf && msg.text ? `<button onclick="startEditMessage('${msg.id}')" title="Editar" class="p-1 hover:bg-white/10 rounded text-gray-300"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>` : ''}
+        <button onclick="deleteMessage('${msg.id}')" title="Excluir" class="p-1 hover:bg-rose-500/20 rounded text-rose-400"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+      </div>
+    `;
+    feed.appendChild(row);
+  });
+
+  lucide.createIcons();
+  feed.scrollTop = feed.scrollHeight;
+}
+
+function renderAudioPlayerHtml(msg) {
+  return `
+    <div class="flex items-center gap-2.5 min-w-[210px] py-1">
+      <button onclick="playVoiceNote('${msg.id}', '${msg.audio}')" id="play-btn-${msg.id}"
+              class="w-8 h-8 rounded-full bg-black/25 hover:bg-black/40 flex items-center justify-center shrink-0">
+        <i data-lucide="play" class="w-4 h-4"></i>
+      </button>
+      <div class="flex-1 space-y-1">
+        <div class="h-1.5 rounded-full bg-black/25 overflow-hidden">
+          <div id="audio-prog-${msg.id}" class="h-full bg-white w-0 transition-all"></div>
+        </div>
+        <div class="flex justify-between text-[10px] opacity-80 font-mono-id">
+          <span>Mensagem de Voz</span>
+          <span>${formatDuration(msg.audioDuration)}</span>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+let activeAudioEl = null;
+function playVoiceNote(msgId, src) {
+  if (activeAudioEl) {
+    activeAudioEl.pause();
+    activeAudioEl = null;
+  }
+  const audio = new Audio(src);
+  activeAudioEl = audio;
+  const prog = document.getElementById(`audio-prog-${msgId}`);
+  audio.ontimeupdate = () => {
+    if (prog && audio.duration) {
+      prog.style.width = `${(audio.currentTime / audio.duration) * 100}%`;
+    }
+  };
+  audio.onended = () => {
+    if (prog) prog.style.width = '0%';
+  };
+  audio.play().catch(() => showToast('Não foi possível reproduzir este áudio.'));
+}
+
+// Ações de Mensagem
+function toggleMessageReaction(msgId, emoji) {
+  const key = getActiveThreadKey();
+  const msg = (state.messages[key] || []).find(m => m.id === msgId);
+  if (!msg) return;
+  if (!msg.reactions) msg.reactions = {};
+  if (!msg.reactions[emoji]) msg.reactions[emoji] = [];
+  const idx = msg.reactions[emoji].indexOf(state.user.id);
+  if (idx === -1) msg.reactions[emoji].push(state.user.id);
+  else msg.reactions[emoji].splice(idx, 1);
+
+  if (state.ui.mode === 'dm' && dataConnections[state.ui.activeDmId]?.open) {
+    dataConnections[state.ui.activeDmId].send({ type: 'MSG_REACTION', threadKey: key, msgId, emoji });
+  }
+  saveState();
+  renderMessages();
+}
+
+function startReplyToMessage(msgId) {
+  const key = getActiveThreadKey();
+  const msg = (state.messages[key] || []).find(m => m.id === msgId);
+  if (!msg) return;
+  state.ui.replyingTo = { id: msg.id, senderName: msg.senderName, text: msg.text };
+  state.ui.editingMsgId = null;
+  const bar = document.getElementById('composer-context-bar');
+  bar.classList.remove('hidden');
+  document.getElementById('composer-context-info').innerHTML = `<i data-lucide="reply" class="w-3.5 h-3.5"></i> Respondendo a <strong>${escapeHtml(msg.senderName)}</strong>: ${escapeHtml(msg.text || 'Mídia')}`;
+  lucide.createIcons();
+  document.getElementById('msg-textarea').focus();
+}
+
+function startEditMessage(msgId) {
+  const key = getActiveThreadKey();
+  const msg = (state.messages[key] || []).find(m => m.id === msgId);
+  if (!msg) return;
+  state.ui.editingMsgId = msg.id;
+  state.ui.replyingTo = null;
+  const bar = document.getElementById('composer-context-bar');
+  bar.classList.remove('hidden');
+  document.getElementById('composer-context-info').innerHTML = `<i data-lucide="pencil" class="w-3.5 h-3.5"></i> Editando mensagem`;
+  const ta = document.getElementById('msg-textarea');
+  ta.value = msg.text;
+  ta.focus();
+  updateComposerButtons();
+  lucide.createIcons();
+}
+
+function clearComposerContext() {
+  state.ui.replyingTo = null;
+  state.ui.editingMsgId = null;
+  document.getElementById('composer-context-bar').classList.add('hidden');
+}
+
+function togglePinMessage(msgId) {
+  const key = getActiveThreadKey();
+  const msg = (state.messages[key] || []).find(m => m.id === msgId);
+  if (!msg) return;
+  msg.pinned = !msg.pinned;
+  saveState();
+  renderMessages();
+  showToast(msg.pinned ? 'Mensagem fixada!' : 'Mensagem desafixada.');
+}
+
+function deleteMessage(msgId) {
+  const key = getActiveThreadKey();
+  if (!state.messages[key]) return;
+  state.messages[key] = state.messages[key].filter(m => m.id !== msgId);
+  saveState();
+  renderMessages();
+}
+
+function scrollToMessage(msgId) {
+  const el = document.getElementById(`msg-row-${msgId}`);
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('flash-msg');
+    setTimeout(() => el.classList.remove('flash-msg'), 1600);
+  }
+}
+
+function togglePinnedPopover() {
+  const pop = document.getElementById('pinned-popover');
+  pop.classList.toggle('hidden');
+  if (!pop.classList.contains('hidden')) {
+    const key = getActiveThreadKey();
+    const pinned = (state.messages[key] || []).filter(m => m.pinned);
+    const list = document.getElementById('pinned-list');
+    list.innerHTML = pinned.length
+      ? pinned.map(m => `<div onclick="scrollToMessage('${m.id}'); togglePinnedPopover();" class="p-2 rounded-xl bg-white/5 hover:bg-white/10 cursor-pointer"><strong>${escapeHtml(m.senderName)}:</strong> ${escapeHtml(m.text || 'Mídia')}</div>`).join('')
+      : '<div class="text-gray-500 text-center py-4">Nenhuma mensagem fixada.</div>';
+  }
+}
+
+// =========================================================
+// PAINEL DIREITO (INSPECTOR — SEM CARGOS OU TAGS)
+// =========================================================
+function toggleRightInspector() {
+  const el = document.getElementById('right-inspector');
+  el.classList.toggle('hidden');
+  el.classList.toggle('flex');
+}
+
+function renderInspector() {
+  const box = document.getElementById('inspector-content');
+  if (state.ui.mode === 'dm' && state.ui.activeDmId && state.contacts[state.ui.activeDmId]) {
+    const c = state.contacts[state.ui.activeDmId];
+    const msgs = state.messages[`dm_${c.id}`] || [];
+    const media = msgs.filter(m => m.image || m.gif);
+
+    box.innerHTML = `
+      <div class="rounded-2xl overflow-hidden border" style="background: var(--bg-elevated); border-color: var(--border-subtle);">
+        <div class="h-16" style="background: linear-gradient(135deg, #111827, #1e1b4b);"></div>
+        <div class="px-4 pb-4 -mt-8">
+          <img src="${c.avatar || generateDefaultAvatar(c.displayName)}" class="w-16 h-16 object-cover avatar-shape ring-4 ring-[#12151D]" />
+          <div class="mt-2 font-semibold text-sm">${escapeHtml(c.alias || c.displayName)}</div>
+          <div class="font-mono-id text-[11px] text-gray-400">${escapeHtml(c.id)}</div>
+          <p class="text-xs text-gray-400 mt-2 leading-relaxed">${escapeHtml(c.bio || 'Sem biografia.')}</p>
+        </div>
+      </div>
+
+      <div class="space-y-2">
+        <div class="text-[10px] font-semibold uppercase tracking-wider text-gray-500">Mídias Compartilhadas (${media.length})</div>
+        <div class="grid grid-cols-3 gap-1.5">
+          ${media.slice(-6).map(m => `<img src="${m.image || m.gif}" onclick="openLightbox('${m.image || m.gif}')" class="w-full h-16 object-cover rounded-lg cursor-zoom-in" />`).join('') || '<div class="col-span-3 text-[11px] text-gray-500">Nenhuma mídia ainda.</div>'}
+        </div>
+      </div>
+
+      <div class="pt-2 border-t space-y-1.5" style="border-color: var(--border-subtle);">
+        <button onclick="blockContact('${c.id}')" class="w-full py-2 rounded-xl text-xs text-rose-400 hover:bg-rose-500/10 transition">
+          Bloquear Usuário
+        </button>
+      </div>
+    `;
+  } else if (state.ui.mode === 'space' && state.ui.activeSpaceId && state.spaces[state.ui.activeSpaceId]) {
+    const sp = state.spaces[state.ui.activeSpaceId];
+    // Lista igualitária de participantes (ZERO cargos, tags ou hierarquias)
+    box.innerHTML = `
+      <div class="text-[10px] font-semibold uppercase tracking-wider text-gray-500">Participantes (${sp.members.length})</div>
+      <div class="space-y-1.5">
+        ${sp.members.map(mId => {
+          const isMe = mId === state.user.id;
+          const info = isMe ? state.user : (state.contacts[mId] || { id: mId, displayName: mId, avatar: generateDefaultAvatar(mId) });
+          return `
+            <div class="flex items-center gap-2.5 p-2 rounded-xl hover:bg-white/5">
+              <img src="${info.avatar}" class="w-8 h-8 object-cover avatar-shape" />
+              <div class="min-w-0 flex-1">
+                <div class="text-xs font-medium truncate">${escapeHtml(info.displayName)} ${isMe ? '(Você)' : ''}</div>
+                <div class="font-mono-id text-[10px] text-gray-500 truncate">${escapeHtml(mId)}</div>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  }
+}
+
+function blockContact(id) {
+  if (!state.contacts[id]) return;
+  state.contacts[id].blocked = true;
+  if (state.ui.activeDmId === id) state.ui.activeDmId = null;
+  saveState();
+  renderNavList();
+  updateChatHeader();
+  renderMessages();
+  showToast('Usuário bloqueado.');
+}
+
+// =========================================================
+// CENTRAL COMPLETA DE CONFIGURAÇÕES (SEM CARGOS/TAGS)
+// =========================================================
+function openSettingsTab(tabKey) {
+  state.ui.activeSettingsTab = tabKey;
+  openModal('settings-modal');
+
+  document.querySelectorAll('.settings-tab-btn').forEach(btn => {
+    const active = btn.dataset.tab === tabKey;
+    btn.style.background = active ? 'var(--accent-soft)' : 'transparent';
+    btn.style.color = active ? 'var(--accent)' : 'var(--text-secondary)';
+  });
+
+  const titles = {
+    profile: 'Perfil & Conta',
+    appearance: 'Temas & Aparência Ultra-Dark',
+    privacy: 'Privacidade & Usuários Bloqueados',
+    audio: 'Áudio, Vídeo & Dispositivos WebRTC',
+    notifications: 'Sons & Notificações',
+    storage: 'Armazenamento & Backup'
+  };
+  document.getElementById('settings-panel-title').textContent = titles[tabKey] || 'Configurações';
+  renderSettingsContent(tabKey);
+  lucide.createIcons();
+}
+
+function renderSettingsContent(tab) {
+  const body = document.getElementById('settings-panel-body');
+
+  if (tab === 'profile') {
+    body.innerHTML = `
+      <div class="rounded-2xl overflow-hidden border" style="background: var(--bg-elevated); border-color: var(--border-subtle);">
+        <div class="h-24 relative" style="background: ${state.user.bannerImage ? `url(${state.user.bannerImage}) center/cover` : state.user.bannerColor};">
+          <label class="absolute bottom-2 right-2 px-2.5 py-1 rounded-lg bg-black/70 hover:bg-black text-white cursor-pointer text-[11px]">
+            Alterar Banner
+            <input type="file" accept="image/*" class="hidden" onchange="updateUserMedia('banner', event)" />
+          </label>
+        </div>
+        <div class="px-5 pb-5 -mt-10 flex items-end justify-between">
+          <div class="relative">
+            <img src="${state.user.avatar}" class="w-20 h-20 object-cover avatar-shape ring-4 ring-[#12151D] bg-zinc-900" />
+            <label class="absolute bottom-0 right-0 p-1.5 rounded-full bg-indigo-600 text-white cursor-pointer shadow">
+              <i data-lucide="camera" class="w-3.5 h-3.5"></i>
+              <input type="file" accept="image/*" class="hidden" onchange="updateUserMedia('avatar', event)" />
+            </label>
+          </div>
+          <div class="text-right">
+            <div class="text-[10px] text-gray-500 uppercase">ID P2P Único</div>
+            <div class="font-mono-id text-sm font-semibold" style="color: var(--accent);">${state.user.id}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-gray-400 mb-1">Nome de Exibição</label>
+          <input type="text" value="${escapeHtml(state.user.displayName)}" onchange="updateUserField('displayName', this.value)"
+                 class="w-full px-3.5 py-2 rounded-xl outline-none" style="background: var(--bg-elevated); border: 1px solid var(--border-subtle);" />
+        </div>
+        <div>
+          <label class="block text-gray-400 mb-1">@Username</label>
+          <input type="text" value="${escapeHtml(state.user.username)}" onchange="updateUserField('username', this.value)"
+                 class="w-full px-3.5 py-2 rounded-xl outline-none font-mono-id" style="background: var(--bg-elevated); border: 1px solid var(--border-subtle);" />
+        </div>
+        <div>
+          <label class="block text-gray-400 mb-1">Pronomes</label>
+          <input type="text" value="${escapeHtml(state.user.pronouns || '')}" placeholder="Ex: ele/dele, ela/dela" onchange="updateUserField('pronouns', this.value)"
+                 class="w-full px-3.5 py-2 rounded-xl outline-none" style="background: var(--bg-elevated); border: 1px solid var(--border-subtle);" />
+        </div>
+        <div>
+          <label class="block text-gray-400 mb-1">Status Personalizado</label>
+          <input type="text" value="${escapeHtml(state.user.customStatus || '')}" placeholder="Ex: 🌙 Codando de madrugada" onchange="updateUserField('customStatus', this.value)"
+                 class="w-full px-3.5 py-2 rounded-xl outline-none" style="background: var(--bg-elevated); border: 1px solid var(--border-subtle);" />
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-gray-400 mb-1">Biografia / Sobre Mim</label>
+        <textarea rows="3" maxlength="240" onchange="updateUserField('bio', this.value)"
+                  class="w-full px-3.5 py-2 rounded-xl outline-none resize-none"
+                  style="background: var(--bg-elevated); border: 1px solid var(--border-subtle);">${escapeHtml(state.user.bio)}</textarea>
+      </div>
+
+      <div class="p-4 rounded-2xl border flex items-center justify-between" style="background: var(--bg-elevated); border-color: var(--border-subtle);">
+        <div>
+          <div class="font-semibold">Regenerar ID Único P2P</div>
+          <div class="text-gray-400 text-[11px]">Gera um novo código ECO-XXXX e reinicia sua conexão na rede.</div>
+        </div>
+        <button onclick="regenerateOwnPeerId()" class="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/15 font-medium">
+          Gerar Novo ID
+        </button>
+      </div>
+    `;
+  } else if (tab === 'appearance') {
+    body.innerHTML = `
+      <div class="space-y-3">
+        <div class="font-semibold text-sm">Presets Ultra-Dark</div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          ${Object.entries(DARK_THEMES).map(([k, t]) => `
+            <button onclick="setThemePreset('${k}')" class="p-3 rounded-2xl border text-left transition flex items-center gap-3 ${state.settings.themeKey === k ? 'ring-2' : ''}"
+                    style="background: ${t.elevated}; border-color: var(--border-focus); --tw-ring-color: var(--accent);">
+              <span class="w-6 h-6 rounded-full border border-white/20 shrink-0" style="background: ${t.canvas};"></span>
+              <span class="font-medium truncate">${t.name}</span>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="p-4 rounded-2xl border space-y-2" style="background: var(--bg-elevated); border-color: var(--border-subtle);">
+          <div class="font-semibold">Cor de Destaque (Accent)</div>
+          <div class="flex items-center gap-2 flex-wrap">
+            ${['#6366F1','#10B981','#EC4899','#8B5CF6','#F59E0B','#06B6D4','#EF4444'].map(col => `
+              <button onclick="setAccentColor('${col}')" class="w-7 h-7 rounded-full border-2 border-white/20" style="background: ${col};"></button>
+            `).join('')}
+            <input type="color" value="${state.settings.accentColor}" onchange="setAccentColor(this.value)" class="w-8 h-8 rounded cursor-pointer bg-transparent" />
+          </div>
+        </div>
+
+        <div class="p-4 rounded-2xl border space-y-2" style="background: var(--bg-elevated); border-color: var(--border-subtle);">
+          <div class="font-semibold">Estilo dos Balões</div>
+          <div class="flex gap-2">
+            ${[['rounded','Arredondado'],['pill','Pílula'],['clean','Limpo']].map(([val, lbl]) => `
+              <button onclick="updateSetting('bubbleStyle', '${val}')" class="px-3 py-1.5 rounded-xl border ${state.settings.bubbleStyle === val ? 'text-white' : 'text-gray-400'}"
+                      style="background: ${state.settings.bubbleStyle === val ? 'var(--accent)' : 'transparent'}; border-color: var(--border-subtle);">${lbl}</button>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+
+      <div class="p-4 rounded-2xl border space-y-3" style="background: var(--bg-elevated); border-color: var(--border-subtle);">
+        <div class="font-semibold">Papel de Parede do Chat</div>
+        <div class="flex flex-wrap gap-2">
+          ${[['none','Preto Sólido'],['grid','Grade Noturna'],['dots','Pontos Discretos']].map(([val, lbl]) => `
+            <button onclick="updateSetting('wallpaperType', '${val}')" class="px-3 py-1.5 rounded-xl border ${state.settings.wallpaperType === val ? 'text-white' : 'text-gray-400'}"
+                    style="background: ${state.settings.wallpaperType === val ? 'var(--accent)' : 'transparent'}; border-color: var(--border-subtle);">${lbl}</button>
+          `).join('')}
+          <label class="px-3 py-1.5 rounded-xl border cursor-pointer hover:bg-white/5" style="border-color: var(--border-subtle);">
+            Upload Foto do PC
+            <input type="file" accept="image/*" class="hidden" onchange="uploadCustomWallpaper(event)" />
+          </label>
+        </div>
+        <div class="grid grid-cols-2 gap-4 pt-2">
+          <div>
+            <label class="text-gray-400">Opacidade (${state.settings.wallpaperOpacity}%)</label>
+            <input type="range" min="5" max="85" value="${state.settings.wallpaperOpacity}" oninput="updateSetting('wallpaperOpacity', Number(this.value))" class="w-full" />
+          </div>
+          <div>
+            <label class="text-gray-400">Desfoque / Blur (${state.settings.wallpaperBlur}px)</label>
+            <input type="range" min="0" max="20" value="${state.settings.wallpaperBlur}" oninput="updateSetting('wallpaperBlur', Number(this.value))" class="w-full" />
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="p-4 rounded-2xl border space-y-2" style="background: var(--bg-elevated); border-color: var(--border-subtle);">
+          <div class="font-semibold">Densidade</div>
+          <select onchange="updateSetting('density', this.value)" class="w-full p-2 rounded-xl bg-black/40 border border-white/10">
+            <option value="comfortable" ${state.settings.density === 'comfortable' ? 'selected' : ''}>Confortável (WhatsApp)</option>
+            <option value="compact" ${state.settings.density === 'compact' ? 'selected' : ''}>Compacto</option>
+          </select>
+        </div>
+        <div class="p-4 rounded-2xl border space-y-2" style="background: var(--bg-elevated); border-color: var(--border-subtle);">
+          <div class="font-semibold">Tamanho da Fonte (${state.settings.fontSize}px)</div>
+          <input type="range" min="13" max="18" value="${state.settings.fontSize}" oninput="updateSetting('fontSize', Number(this.value))" class="w-full" />
+        </div>
+        <div class="p-4 rounded-2xl border space-y-2" style="background: var(--bg-elevated); border-color: var(--border-subtle);">
+          <div class="font-semibold">Formato dos Avatares</div>
+          <select onchange="updateSetting('avatarShape', this.value)" class="w-full p-2 rounded-xl bg-black/40 border border-white/10">
+            <option value="circle" ${state.settings.avatarShape === 'circle' ? 'selected' : ''}>Circular</option>
+            <option value="squircle" ${state.settings.avatarShape === 'squircle' ? 'selected' : ''}>Squircle Moderno</option>
+          </select>
+        </div>
+      </div>
+    `;
+  } else if (tab === 'privacy') {
+    const blocked = Object.values(state.contacts).filter(c => c.blocked);
+    body.innerHTML = `
+      <div class="space-y-3">
+        ${renderToggleRow('Confirmação de Leitura (Ticks)', 'Envia confirmação quando você abre uma conversa.', 'readReceipts')}
+        ${renderToggleRow('Indicador "Digitando..."', 'Mostra ao outro usuário quando você está escrevendo.', 'typingIndicator')}
+        ${renderToggleRow('Desfocar Mídia de Desconhecidos', 'Protege contra imagens inesperadas.', 'blurUnknownMedia')}
+      </div>
+      <div class="p-4 rounded-2xl border space-y-2" style="background: var(--bg-elevated); border-color: var(--border-subtle);">
+        <div class="font-semibold">Usuários Bloqueados (${blocked.length})</div>
+        ${blocked.length ? blocked.map(b => `
+          <div class="flex items-center justify-between py-1.5">
+            <span>${escapeHtml(b.displayName)} (${b.id})</span>
+            <button onclick="unblockContact('${b.id}')" class="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20">Desbloquear</button>
+          </div>
+        `).join('') : '<div class="text-gray-500">Nenhum usuário bloqueado.</div>'}
+      </div>
+    `;
+  } else if (tab === 'audio') {
+    body.innerHTML = `
+      <div class="p-4 rounded-2xl border space-y-3" style="background: var(--bg-elevated); border-color: var(--border-subtle);">
+        <div class="font-semibold">Dispositivo de Microfone (Áudio & Chamadas WebRTC)</div>
+        <select id="mic-device-select" onchange="updateSetting('selectedMicId', this.value)" class="w-full p-2.5 rounded-xl bg-black/50 border border-white/10">
+          <option value="">Microfone Padrão do Sistema</option>
+        </select>
+        <div class="flex items-center gap-3">
+          <button onclick="toggleMicTester()" id="btn-mic-tester" class="px-3.5 py-2 rounded-xl text-white font-medium" style="background: var(--accent);">
+            Testar Microfone ao Vivo
+          </button>
+          <div class="flex-1 h-2.5 rounded-full bg-black/60 overflow-hidden">
+            <div id="mic-level-bar" class="h-full bg-emerald-500 w-0 transition-all duration-75"></div>
+          </div>
+        </div>
+      </div>
+    `;
+    populateMicDevices();
+  } else if (tab === 'notifications') {
+    body.innerHTML = `
+      <div class="space-y-3">
+        ${renderToggleRow('Som ao Enviar Mensagem', 'Feedback sonoro sutil sintetizado via Web Audio.', 'soundSend')}
+        ${renderToggleRow('Som ao Receber Mensagem', 'Alerta sonoro discreto ao receber dados P2P.', 'soundReceive')}
+        ${renderToggleRow('Modo Não Perturbe (DND)', 'Silencia todos os sons e notificações.', 'dndMode')}
+        <div class="flex gap-2 pt-2">
+          <button onclick="playUiSound('send')" class="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15">Testar Som Envio</button>
+          <button onclick="playUiSound('receive')" class="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15">Testar Som Recebimento</button>
+          <button onclick="requestDesktopPermission()" class="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15">Ativar Notificações Desktop</button>
+        </div>
+      </div>
+    `;
+  } else if (tab === 'storage') {
+    const bytes = new Blob([localStorage.getItem(STORAGE_KEY) || '']).size;
+    const kb = (bytes / 1024).toFixed(1);
+    body.innerHTML = `
+      <div class="p-4 rounded-2xl border space-y-3" style="background: var(--bg-elevated); border-color: var(--border-subtle);">
+        <div class="font-semibold">Uso de Armazenamento Local (Browser)</div>
+        <div class="text-gray-400">Espaço ocupado por histórico, fotos e notas de voz: <strong class="text-white font-mono-id">${kb} KB</strong></div>
+        <div class="flex gap-2 pt-2">
+          <button onclick="clearOldMedia()" class="px-3.5 py-2 rounded-xl bg-amber-500/20 text-amber-300 hover:bg-amber-500/30">Limpar Mídias Pesadas</button>
+          <button onclick="factoryResetEco()" class="px-3.5 py-2 rounded-xl bg-rose-600/20 text-rose-400 hover:bg-rose-600/30">Resetar Tudo</button>
+        </div>
+      </div>
+    `;
+  }
+}
+
+function renderToggleRow(title, desc, settingKey) {
+  const checked = state.settings[settingKey];
+  return `
+    <div class="p-4 rounded-2xl border flex items-center justify-between gap-4" style="background: var(--bg-elevated); border-color: var(--border-subtle);">
+      <div>
+        <div class="font-semibold">${title}</div>
+        <div class="text-gray-400 text-[11px]">${desc}</div>
+      </div>
+      <button onclick="updateSetting('${settingKey}', !state.settings['${settingKey}']); renderSettingsContent(state.ui.activeSettingsTab);"
+              class="w-11 h-6 rounded-full p-0.5 transition ${checked ? '' : 'bg-zinc-700'}"
+              style="background: ${checked ? 'var(--accent)' : ''};">
+        <div class="w-5 h-5 rounded-full bg-white transition-transform ${checked ? 'translate-x-5' : 'translate-x-0'}"></div>
+      </button>
+    </div>
+  `;
+}
+
+// Atualizadores de Perfil e Tema
+function updateUserField(field, val) {
+  state.user[field] = val.trim();
+  saveState();
+  updateSelfUi();
+  // Sincronizar com peers conectados
+  Object.values(dataConnections).forEach(c => {
+    if (c.open) c.send({ type: 'PROFILE_SYNC', profile: state.user });
+  });
+}
+
+function updateUserMedia(kind, event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    if (kind === 'avatar') state.user.avatar = e.target.result;
+    else state.user.bannerImage = e.target.result;
+    saveState();
+    updateSelfUi();
+    renderSettingsContent('profile');
+    Object.values(dataConnections).forEach(c => {
+      if (c.open) c.send({ type: 'PROFILE_SYNC', profile: state.user });
+    });
+  };
+  reader.readAsDataURL(file);
+}
+
+function regenerateOwnPeerId() {
+  state.user.id = generateEcoId();
+  saveState();
+  initPeerNetwork();
+  renderSettingsContent('profile');
+  showToast('Novo ID gerado: ' + state.user.id);
+}
+
+function setThemePreset(key) {
+  state.settings.themeKey = key;
+  applyThemeVariables();
+  saveState();
+  renderSettingsContent('appearance');
+}
+
+function setAccentColor(hex) {
+  state.settings.accentColor = hex;
+  applyThemeVariables();
+  saveState();
+}
+
+function updateSetting(key, val) {
+  state.settings[key] = val;
+  applyThemeVariables();
+  saveState();
+  renderMessages();
+}
+
+function uploadCustomWallpaper(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    state.settings.wallpaperType = 'custom';
+    state.settings.wallpaperImage = e.target.result;
+    applyThemeVariables();
+    saveState();
+    renderSettingsContent('appearance');
+  };
+  reader.readAsDataURL(file);
+}
+
+function applyThemeVariables() {
+  const root = document.documentElement;
+  const t = DARK_THEMES[state.settings.themeKey] || DARK_THEMES.obsidian;
+  root.style.setProperty('--bg-canvas', t.canvas);
+  root.style.setProperty('--bg-rail', t.rail);
+  root.style.setProperty('--bg-sidebar', t.sidebar);
+  root.style.setProperty('--bg-elevated', t.elevated);
+  root.style.setProperty('--bg-surface-hover', t.hover);
+  root.style.setProperty('--accent', state.settings.accentColor);
+  root.style.setProperty('--accent-soft', state.settings.accentColor + '26');
+  root.style.setProperty('--font-size-base', state.settings.fontSize + 'px');
+  root.style.setProperty('--avatar-radius', state.settings.avatarShape === 'circle' ? '9999px' : '12px');
+
+  const wp = document.getElementById('chat-wallpaper-layer');
+  wp.className = 'absolute inset-0 pointer-events-none z-0';
+  wp.style.backgroundImage = '';
+  wp.style.opacity = state.settings.wallpaperOpacity / 100;
+  wp.style.filter = `blur(${state.settings.wallpaperBlur}px)`;
+
+  if (state.settings.wallpaperType === 'grid') wp.classList.add('wp-grid');
+  else if (state.settings.wallpaperType === 'dots') wp.classList.add('wp-dots');
+  else if (state.settings.wallpaperType === 'custom' && state.settings.wallpaperImage) {
+    wp.style.backgroundImage = `url(${state.settings.wallpaperImage})`;
+    wp.style.backgroundSize = 'cover';
+    wp.style.backgroundPosition = 'center';
+  }
+}
+
+async function populateMicDevices() {
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const sel = document.getElementById('mic-device-select');
+    if (!sel) return;
+    devices.filter(d => d.kind === 'audioinput').forEach(d => {
+      const opt = document.createElement('option');
+      opt.value = d.deviceId;
+      opt.textContent = d.label || `Microfone (${d.deviceId.slice(0, 6)})`;
+      if (d.deviceId === state.settings.selectedMicId) opt.selected = true;
+      sel.appendChild(opt);
+    });
+  } catch (e) {}
+}
+
+async function toggleMicTester() {
+  const btn = document.getElementById('btn-mic-tester');
+  if (micTestStream) {
+    micTestStream.getTracks().forEach(t => t.stop());
+    micTestStream = null;
+    cancelAnimationFrame(micTestAnimFrame);
+    btn.textContent = 'Testar Microfone ao Vivo';
+    return;
+  }
+  try {
+    micTestStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    btn.textContent = 'Parar Teste';
+    const ctx = new AudioContext();
+    const src = ctx.createMediaStreamSource(micTestStream);
+    const analyser = ctx.createAnalyser();
+    src.connect(analyser);
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    const tick = () => {
+      analyser.getByteFrequencyData(data);
+      const avg = data.reduce((a, b) => a + b, 0) / data.length;
+      const bar = document.getElementById('mic-level-bar');
+      if (bar) bar.style.width = Math.min(100, avg * 2.5) + '%';
+      micTestAnimFrame = requestAnimationFrame(tick);
+    };
+    tick();
+  } catch (e) {
+    showToast('Permissão de microfone negada pelo navegador.');
+  }
+}
+
+function unblockContact(id) {
+  if (state.contacts[id]) state.contacts[id].blocked = false;
+  saveState();
+  renderNavList();
+  renderSettingsContent('privacy');
+}
+
+function requestDesktopPermission() {
+  if ('Notification' in window) {
+    Notification.requestPermission().then(p => showToast('Permissão de notificação: ' + p));
+  }
+}
+
+function triggerDesktopNotification(title, body) {
+  if (state.settings.dndMode || !('Notification' in window)) return;
+  if (Notification.permission === 'granted' && document.hidden) {
+    new Notification(title, { body });
+  }
+}
+
+function clearOldMedia() {
+  Object.values(state.messages).forEach(arr => {
+    arr.forEach(m => { m.image = null; m.audio = null; });
+  });
+  saveState();
+  renderMessages();
+  renderSettingsContent('storage');
+  showToast('Mídias antigas limpas!');
+}
+
+function factoryResetEco() {
+  if (!confirm('Apagar todas as conversas, contatos e configurações locais?')) return;
+  localStorage.removeItem(STORAGE_KEY);
+  location.reload();
+}
+
+// =========================================================
+// PICKERS (EMOJIS & GIFS), QUICK SWITCHER & HELPERS
+// =========================================================
+function togglePickerDrawer(tab) {
+  const drawer = document.getElementById('picker-drawer');
+  const isHidden = drawer.classList.contains('hidden');
+  drawer.classList.remove('hidden');
+  switchPickerTab(tab);
+  if (!isHidden && drawer.dataset.activeTab === tab) {
+    drawer.classList.add('hidden');
+  }
+  drawer.dataset.activeTab = tab;
+}
+function closePickerDrawer() { document.getElementById('picker-drawer').classList.add('hidden'); }
+
+function switchPickerTab(tab) {
+  document.getElementById('picker-emoji-content').classList.toggle('hidden', tab !== 'emoji');
+  document.getElementById('picker-gif-content').classList.toggle('hidden', tab !== 'gif');
+  document.getElementById('tab-picker-emoji').style.background = tab === 'emoji' ? 'var(--accent-soft)' : 'transparent';
+  document.getElementById('tab-picker-gif').style.background = tab === 'gif' ? 'var(--accent-soft)' : 'transparent';
+  if (tab === 'emoji') {
+    document.getElementById('picker-emoji-content').innerHTML = EMOJI_LIST.map(e =>
+      `<button onclick="insertEmoji('${e}')" class="p-1.5 hover:bg-white/10 rounded-lg">${e}</button>`
+    ).join('');
+  } else {
+    renderGifGrid();
+  }
+}
+
+function insertEmoji(e) {
+  const ta = document.getElementById('msg-textarea');
+  ta.value += e;
+  ta.focus();
+  updateComposerButtons();
+}
+
+function renderGifGrid() {
+  const q = document.getElementById('gif-search-input').value.toLowerCase();
+  const filtered = CURATED_GIFS.filter(g => g.tag.includes(q));
+  document.getElementById('gif-grid').innerHTML = filtered.map(g => `
+    <button onclick="sendCurrentMessage({ gif: '${g.url}' }); closePickerDrawer();" class="rounded-xl overflow-hidden border border-white/10 hover:scale-105 transition">
+      <img src="${g.url}" class="w-full h-20 object-cover" />
+    </button>
+  `).join('');
+}
+
+function renderQuickSwitcher(query = '') {
+  const q = query.toLowerCase();
+  const res = document.getElementById('quick-switcher-results');
+  const items = [];
+
+  Object.values(state.contacts).forEach(c => {
+    if (!c.blocked && ((c.alias || c.displayName).toLowerCase().includes(q) || c.id.toLowerCase().includes(q))) {
+      items.push({ label: `DM: ${c.alias || c.displayName} (${c.id})`, action: () => { openDmConversation(c.id); closeModal('quick-switcher-modal'); } });
+    }
+  });
+  Object.values(state.spaces).forEach(sp => {
+    if (sp.name.toLowerCase().includes(q)) {
+      items.push({ label: `Espaço: ${sp.icon} ${sp.name}`, action: () => { switchMode('space', sp.id); closeModal('quick-switcher-modal'); } });
+    }
+  });
+  items.push({ label: '⚙️ Abrir Configurações', action: () => { closeModal('quick-switcher-modal'); openSettingsTab('profile'); } });
+
+  res.innerHTML = '';
+  items.forEach(it => {
+    const b = document.createElement('button');
+    b.className = 'w-full text-left px-3 py-2 rounded-xl hover:bg-white/10 transition';
+    b.textContent = it.label;
+    b.onclick = it.action;
+    res.appendChild(b);
+  });
+}
+
+// Helpers UI
+function updateSelfUi() {
+  document.getElementById('self-avatar-img').src = state.user.avatar;
+  document.getElementById('self-display-name').textContent = state.user.displayName;
+  document.getElementById('self-eco-id').textContent = state.user.id;
+  document.getElementById('welcome-own-id').textContent = state.user.id;
+  document.getElementById('modal-own-id').textContent = state.user.id;
+}
+
+function copyOwnId() { copyText(state.user.id, `Seu ID (${state.user.id}) foi copiado!`); }
+function copyText(txt, msg) {
+  navigator.clipboard?.writeText(txt).catch(() => {});
+  showToast(msg);
+}
+
+function cycleOwnStatus() {
+  const order = ['online', 'idle', 'dnd', 'invisible'];
+  const next = order[(order.indexOf(state.user.status) + 1) % order.length];
+  state.user.status = next;
+  const dot = document.getElementById('self-status-dot');
+  dot.className = `w-2.5 h-2.5 rounded-full ring-2 ring-[#07080B] absolute bottom-0 right-0 ${
+    next === 'online' ? 'bg-emerald-500' : next === 'idle' ? 'bg-amber-500' : next === 'dnd' ? 'bg-rose-500' : 'bg-zinc-500'
+  }`;
+  saveState();
+  showToast('Status alterado para: ' + next.toUpperCase());
+}
+
+function handleComposerKeydown(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendCurrentMessage();
+  } else if (e.key === 'ArrowUp' && !e.target.value) {
+    const key = getActiveThreadKey();
+    const ownMsgs = (state.messages[key] || []).filter(m => m.senderId === state.user.id && m.text);
+    if (ownMsgs.length) startEditMessage(ownMsgs[ownMsgs.length - 1].id);
+  }
+}
+
+let typingThrottle = 0;
+function handleComposerInput(ta) {
+  ta.style.height = 'auto';
+  ta.style.height = Math.min(ta.scrollHeight, 128) + 'px';
+  updateComposerButtons();
+
+  if (state.ui.mode === 'dm' && state.settings.typingIndicator && Date.now() - typingThrottle > 1500) {
+    typingThrottle = Date.now();
+    const conn = dataConnections[state.ui.activeDmId];
+    if (conn && conn.open) conn.send({ type: 'TYPING' });
+  }
+}
+
+function updateComposerButtons() {
+  const hasContent = document.getElementById('msg-textarea').value.trim().length > 0 || Boolean(state.ui.pendingImage);
+  document.getElementById('btn-mic-record').classList.toggle('hidden', hasContent);
+  document.getElementById('btn-send-msg').classList.toggle('hidden', !hasContent);
+}
+
+function openModal(id) {
+  document.getElementById(id).classList.remove('hidden');
+  if (id === 'quick-switcher-modal') {
+    const inp = document.getElementById('quick-switcher-input');
+    inp.value = '';
+    renderQuickSwitcher('');
+    setTimeout(() => inp.focus(), 50);
+  }
+  lucide.createIcons();
+}
+function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+function switchSpaceModalTab(tab) {
+  document.getElementById('space-create-pane').classList.toggle('hidden', tab !== 'create');
+  document.getElementById('space-join-pane').classList.toggle('hidden', tab !== 'join');
+  document.getElementById('tab-space-create').style.background = tab === 'create' ? 'var(--accent-soft)' : 'transparent';
+  document.getElementById('tab-space-join').style.background = tab === 'join' ? 'var(--accent-soft)' : 'transparent';
+}
+function openLightbox(src) {
+  document.getElementById('lightbox-img').src = src;
+  document.getElementById('lightbox-download').href = src;
+  openModal('lightbox-modal');
+}
+function toggleMobileSidebar() {
+  document.getElementById('nav-sidebar').classList.toggle('hidden');
+}
+
+function showToast(text) {
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  toast.className = 'px-4 py-2.5 rounded-2xl border text-xs font-medium shadow-2xl transition-all duration-300';
+  toast.style.background = 'var(--bg-elevated)';
+  toast.style.borderColor = 'var(--border-focus)';
+  toast.textContent = text;
+  container.appendChild(toast);
+  setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 3000);
+}
+
+function escapeHtml(str) {
+  return String(str || '').replace(/[&<>"']/g, m => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
+}
+
+function parseSafeMarkdown(text) {
+  let safe = escapeHtml(text);
+  safe = safe.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  safe = safe.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  safe = safe.replace(/~~(.+?)~~/g, '<del>$1</del>');
+  safe = safe.replace(/`([^`]+)`/g, '<code class="px-1.5 py-0.5 rounded bg-black/40 font-mono-id text-xs">$1</code>');
+  safe = safe.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener" class="underline text-indigo-400">$1</a>');
+  return safe.replace(/\n/g, '<br>');
+}
+
+function formatTime(ts) {
+  const d = new Date(ts);
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: !state.settings.clock24h });
+}
+function formatDuration(sec) {
+  const m = Math.floor(sec / 60).toString().padStart(2, '0');
+  const s = Math.floor(sec % 60).toString().padStart(2, '0');
+  return `${m}:${s}`;
+}
+
+// Atalhos Globais
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    openModal('quick-switcher-modal');
+  } else if (e.key === 'Escape') {
+    ['add-contact-modal','space-modal','settings-modal','lightbox-modal','quick-switcher-modal'].forEach(closeModal);
+    closePickerDrawer();
+  }
+});
+
+// Inicialização Geral
+window.addEventListener('DOMContentLoaded', () => {
+  loadState();
+  applyThemeVariables();
+  updateSelfUi();
+  setDmFilter('all');
+  switchSpaceModalTab('create');
+  renderLeftRail();
+  renderNavList();
+  updateChatHeader();
+  initPeerNetwork();
+  lucide.createIcons();
+});
+</script>
+</body>
+</html>
