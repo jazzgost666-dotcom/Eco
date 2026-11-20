@@ -1,0 +1,13 @@
+{
+  "name": "eco",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Eco: mensagens e chamadas de voz/vídeo entre contas reais, identificadas por ID",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
